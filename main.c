@@ -2,6 +2,7 @@
  * Copyright(c) 2010-2015 Intel Corporation
  */
 #include <time.h>
+#include <sys/time.h>
 #include <signal.h>
 #include <stdint.h>
 #include <inttypes.h>
@@ -43,28 +44,29 @@ static struct statistic_ja
 {
 	uint32_t IPv4_addr;
 	uint64_t total_size;
-	uint32_t start_time;
+	uint64_t start_time;
 };
 static struct sample_flied
 {
 	char ip_addr[100];
 	uint64_t total_size;
-	uint32_t start_time;
-	uint32_t detect_time;
+	uint64_t start_time;
+	uint64_t detect_time;
 };
 static struct log_pref_data
 {
 	uint64_t packet_per_cycle;
 	uint64_t total_size;
 	uint64_t total_pkt;
-	uint32_t time_stamp;
+	uint64_t time_stamp;
 	uint32_t err_num;
 	uint32_t suc_num;
 };
 int hw_timestamping;
 uint64_t tot_size = 0;
-clock_t st_time,ts;
+clock_t ts;
 time_t ti;
+struct timeval tv;
 uint32_t index_of_file = 0;
 uint32_t sample_log_i = 0;
 struct tm currtime;
@@ -121,9 +123,6 @@ static uint16_t
 calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 		struct rte_mbuf **pkts, uint16_t nb_pkts, void *_ __rte_unused)
 {
-	/*ti = time(NULL);
-	currtime = *localtime(&ti);*/
-	ts = clock();
 	uint64_t cycles = 0;
 	uint64_t queue_ticks = 0;
 	uint16_t eth_type;
@@ -152,9 +151,6 @@ calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 			ipv4_hdr = (struct rte_ipv4_hdr *)((char *)ether_hdr + l2_len);
 			src = ipv4_hdr->src_addr;
 			dst = ipv4_hdr->dst_addr;
-			//insert_data(db,src,pkts[i]->pkt_len);
-			//res = rte_hash_add_key(hash_tb,(void*)&src);
-			//printf("%"PRId32"\n",res);
 			res = rte_hash_lookup(hash_tb,(void *)&src);
 			if(res<0){
 				if(res == -EINVAL){
@@ -169,6 +165,7 @@ calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 				ipv4_stat[res].IPv4_addr = src;
 				if(ipv4_stat[res].total_size > 235095650){
 					if((uint32_t)time(NULL) - ipv4_stat[res].start_time < 16){
+							gettimeofday(&tv,NULL);
 							sprintf(log_print[sample_log_i].ip_addr,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
 							(uint8_t)(src & 0xff),
 							(uint8_t)((src >> 8)&0xff),
@@ -176,7 +173,7 @@ calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 							(uint8_t)((src>>24)&0xff));
 							log_print[sample_log_i].total_size = ipv4_stat[res].total_size;
 							log_print[sample_log_i].start_time = ipv4_stat[res].start_time;
-							log_print[sample_log_i].detect_time = (uint32_t)time(NULL);
+							log_print[sample_log_i].detect_time = (uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000;
 							sample_log_i++;
 					}
 					ipv4_stat[res].total_size = 0;
@@ -184,7 +181,8 @@ calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 				}
 				ipv4_stat[res].total_size += tmpsize;
 				if(ipv4_stat[res].start_time == 0){
-					ipv4_stat[res].start_time = (uint32_t)time(NULL);
+					gettimeofday(&tv,NULL);
+					ipv4_stat[res].start_time = (uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000;
 				}
 				
 			}
@@ -199,12 +197,11 @@ calc_latency(uint16_t port, uint16_t qidx __rte_unused,
 	latency_numbers.total_pkts += nb_pkts;
 
 	if (latency_numbers.total_pkts > (100 * 1000* 1000ULL)) {
-		/*fprintf(fp,"%"PRIu64",%"PRIu64",%d,%.2f,%"PRIu32",%"PRIu32"\n",
-		latency_numbers.total_cycles / latency_numbers.total_pkts,tot_size,latency_numbers.total_pkts,(double)(ts-st_time)/CLOCKS_PER_SEC,count_err,count_suc);*/
+		gettimeofday(&tv,NULL);
 		log_col[index_of_file].packet_per_cycle = latency_numbers.total_cycles / latency_numbers.total_pkts;
 		log_col[index_of_file].total_size = tot_size;
 		log_col[index_of_file].total_pkt = latency_numbers.total_pkts;
-		log_col[index_of_file].time_stamp = (uint32_t)time(NULL);
+		log_col[index_of_file].time_stamp = (uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000;
 		log_col[index_of_file].err_num = count_err;
 		log_col[index_of_file].suc_num = count_suc;
 		//printf("%"PRIu64",%d\n",log_col[index_of_file].total_size,index_of_file);
@@ -433,7 +430,7 @@ main(int argc, char *argv[])
 			"App uses only 1 lcore\n");
 
 	/* call lcore_main on master core only */
-	fp = fopen("tmp/add_hash_perf8.csv","w");
+	fp = fopen("tmp/add_hash_perf9.csv","w");
 	//init table
 	bzero(&params,sizeof(params));
 	params.name = "";
@@ -448,7 +445,6 @@ main(int argc, char *argv[])
 	}  
 	printf("******************latency recorded in cpu cycle unit****************\n");
 	fprintf(fp,"packet_per_cycle,total size,packet,time_stamp,err_count,success_count\n");
-	st_time = clock();
 	signal(SIGINT,initHandler);
 	lcore_main();
 	return 0;
