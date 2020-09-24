@@ -16,6 +16,7 @@ dep_main.o = /home/chanawat/project/main.c /usr/include/stdc-predef.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdint.h \
  /usr/include/stdint.h /usr/include/bits/wchar.h /usr/include/inttypes.h \
  /usr/include/getopt.h \
+ /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdbool.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eal.h \
  /usr/include/sched.h /usr/include/bits/sched.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_config.h \
@@ -31,7 +32,6 @@ dep_main.o = /home/chanawat/project/main.c /usr/include/stdc-predef.h \
  /usr/include/bits/stdio_lim.h /usr/include/bits/sys_errlist.h \
  /usr/include/bits/stdio.h /usr/include/sys/queue.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_log.h \
- /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdbool.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_common.h \
  /usr/include/stdlib.h /usr/include/bits/waitflags.h \
  /usr/include/bits/waitstatus.h /usr/include/sys/types.h \
@@ -161,4 +161,5 @@ dep_main.o = /home/chanawat/project/main.c /usr/include/stdc-predef.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_mbuf_dyn.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ethdev_core.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_hash.h \
- /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_jhash.h
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_jhash.h \
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eth_ctrl.h
