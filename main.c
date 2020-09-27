@@ -26,6 +26,7 @@
 	nb_lcores*MEMPOOL_CACHE_SIZE),		\
 	(unsigned)8192)
 #define MAX_PKT_BURST 64
+#define PREFETCH_OFFSET	3
 static uint16_t nb_rxd = 1024;
 static uint16_t nb_txd = 1024;
 static uint64_t time_peroid = 10;
@@ -65,19 +66,29 @@ struct lcore_conf{
 	uint16_t tx_queue_id[RTE_MAX_ETHPORTS];
 }__rte_cache_aligned;
 static struct lcore_conf lcore_conf_arr[RTE_MAX_LCORE];
+#define RSS_HASH_KEY_LENGTH 40
+static uint8_t hash_key[RSS_HASH_KEY_LENGTH] = {
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+};
 static struct rte_eth_conf port_conf = {
     .rxmode = {
         .mq_mode = ETH_MQ_RX_RSS,
         .max_rx_pkt_len = RTE_ETHER_MAX_LEN,
         .split_hdr_size = 0,
-        .offloads = DEV_RX_OFFLOAD_CHECKSUM,
+        .offloads = DEV_RX_OFFLOAD_RSS_HASH,
     },
     .rx_adv_conf = {
         .rss_conf = {
-			.rss_hf =   ETH_RSS_IP |
-              ETH_RSS_TCP |
-              ETH_RSS_UDP |
-              ETH_RSS_SCTP,
+			.rss_key = hash_key,
+        	.rss_key_len = RSS_HASH_KEY_LENGTH,
+        	.rss_hf = ETH_RSS_IP |
+              		  ETH_RSS_TCP |
+              		  ETH_RSS_UDP |
+              		  ETH_RSS_SCTP,
         },
     },
     .txmode = {
@@ -91,64 +102,8 @@ struct basic_port_statistic{
 	uint64_t size;
 }__rte_cache_aligned;
 struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
+unsigned n_port;
 // init section
-int sym_hash_enable(int port_id, uint32_t ftype, enum rte_eth_hash_function function)
-{
-    struct rte_eth_hash_filter_info info;
-    int ret = 0;
-    uint32_t idx = 0;
-    uint32_t offset = 0;
-
-    memset(&info, 0, sizeof(info));
-
-    ret = rte_eth_dev_filter_supported(port_id, RTE_ETH_FILTER_HASH);
-    if (ret < 0) {
-        return ret;
-    }
-
-    info.info_type = RTE_ETH_HASH_FILTER_GLOBAL_CONFIG;
-    info.info.global_conf.hash_func = function;
-
-    idx = ftype / UINT64_BIT;
-    offset = ftype % UINT64_BIT;
-    info.info.global_conf.valid_bit_mask[idx] |= (1ULL << offset);
-    info.info.global_conf.sym_hash_enable_mask[idx] |=
-                        (1ULL << offset);
-
-    ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_HASH,
-                                  RTE_ETH_FILTER_SET, &info);
-    if (ret < 0)
-    {
-        return ret;
-    }
-
-    return 0;
-}
-
-int sym_hash_set(int port_id, int enable)
-{
-    int ret = 0;
-    struct rte_eth_hash_filter_info info;
-
-    memset(&info, 0, sizeof(info));
-
-    ret = rte_eth_dev_filter_supported(port_id, RTE_ETH_FILTER_HASH);
-    if (ret < 0) {
-        return ret;
-    }
-
-    info.info_type = RTE_ETH_HASH_FILTER_SYM_HASH_ENA_PER_PORT;
-    info.info.enable = enable;
-    ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_HASH,
-                        RTE_ETH_FILTER_SET, &info);
-    if (ret < 0)
-    {
-        return ret;
-    }
-
-    return 0;
-}
-
 int
 init_mem(uint16_t portid, unsigned int nb_mbuf)
 {
@@ -197,31 +152,6 @@ init_port(){
 		if(ret != 0){
 			rte_exit(EXIT_FAILURE,"Error geting info of port %u\n",portid);
 		}
-		ret = sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_TCP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
-		if(ret < 0){
-			return ret;
-		}
-		ret = sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_UDP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
-		if(ret < 0){
-			return ret;
-		}
-		ret = sym_hash_enable(portid, RTE_ETH_FLOW_FRAG_IPV4, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
-		if(ret < 0){
-			return ret;
-		}
-		ret = sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_SCTP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
-		if(ret < 0){
-			return ret;
-		}
-		ret = sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_OTHER, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
-		if(ret < 0){
-			return ret;
-		}
-
-		ret= sym_hash_set(portid, 1);
-		if(ret < 0){
-			return ret;
-		}
 		local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
 			dev_info.flow_type_rss_offloads;
 		if (local_port_conf.rx_adv_conf.rss_conf.rss_hf !=
@@ -263,7 +193,7 @@ init_port(){
 			fflush(stdout);
 
 			txconf = &dev_info.default_txconf;
-			//txconf->offloads = local_port_conf.txmode.offloads;
+			txconf->offloads = local_port_conf.txmode.offloads;
 			ret = rte_eth_tx_queue_setup(portid, queueid, nb_txd,
 						     0, txconf);
 			if (ret < 0)
@@ -357,7 +287,6 @@ print_stats(uint64_t tim)
 	float clk_rate = rte_get_timer_hz() * 1.0;
 	total_size = 0;
 	total_packets_rx = 0;
-
 	const char clr[] = { 27, '[', '2', 'J', '\0' };
 	const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
 
@@ -367,8 +296,11 @@ print_stats(uint64_t tim)
 	printf("\t\ttime taken: %lf",tim/clk_rate);
 	printf("\nPort statistics ====================================");
 
-	for (portid = 0; portid < 2; portid++) {
+	for (portid = 0; portid < RTE_MAX_ETHPORTS; portid++) {
 		/* skip disabled ports */
+		if(portid > n_port - 1){
+			continue;
+		}
 		printf("\nStatistics for port %u ------------------------------"
 			   "\nPackets received of this period: %20"PRIu64
 			   "\nSize of this peroid: %21"PRIu64,
@@ -400,18 +332,17 @@ main_loop(void)
 	uint64_t prev_tsc,diff_tsc,curr_tsc,timer_tsc;
 	lcore_id = rte_lcore_id();
 	qconf = &lcore_conf_arr[lcore_id];
-	unsigned queid[3];
-	unsigned portid[3];
+	unsigned queid,j;
+	unsigned portid;
 	if(qconf ->n_rx_queue == 0){
 		printf("lcore %u has nothing to do\n",lcore_id);
 		return;
 	}
-	printf("lcore id: %u number of rx queue: %"PRIu16"\n",lcore_id,qconf->n_rx_queue);
 	for (unsigned i = 0;i<qconf->n_rx_queue;i++){
 		rx_que_ptr = &qconf->rx_queue_list[i];
-		portid[i] = rx_que_ptr->port_id;
-		queid[i] = rx_que_ptr->queue_id;
-		printf("RX port for %u lcore is %u (Que id is %u)\n",lcore_id,portid[i],queid[i]);
+		portid = rx_que_ptr->port_id;
+		queid = rx_que_ptr->queue_id;
+		printf("RX port for %u lcore is %u (Que id is %u)\n",lcore_id,portid,queid);
 	}
 	printf("\n\n");
 	//printf("Starting to listen..................\n");
@@ -421,19 +352,23 @@ main_loop(void)
 	{
 		curr_tsc = rte_rdtsc();
 		//process rx queue
+		diff_tsc = curr_tsc - prev_tsc;
 		for(unsigned i = 0; i < qconf -> n_rx_queue;i++){
-			nb_rx = rte_eth_rx_burst(portid[i],queid[i],pkts_burst,MAX_PKT_BURST);
+			portid = qconf->rx_queue_list[i].port_id;
+			queid = qconf->rx_queue_list[i].queue_id;
+			nb_rx = rte_eth_rx_burst(portid,queid,pkts_burst,MAX_PKT_BURST);
 			if(unlikely(nb_rx == 0)){
-				usleep(10);
+				//printf("%u lcore has no incoming packet\n",lcore_id);
+				//usleep(2); debug goodies :)
 				continue;
 			}
-			for(unsigned j = 0;j<nb_rx;j++){
-				port_stat[portid[i]].rx_packet++;
-				port_stat[portid[i]].size += pkts_burst[j]->pkt_len;
+			rte_atomic64_add(&port_stat[portid].rx_packet,nb_rx);
+			for(j = 0;j<nb_rx;j++){
+				rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[j],void *));
+				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
 				rte_pktmbuf_free(pkts_burst[j]);
 			}
 		}
-		diff_tsc = curr_tsc - prev_tsc;
 		prev_tsc = curr_tsc;
 		timer_tsc += diff_tsc;
 		if(unlikely(timer_tsc >= time_peroid)){
@@ -469,7 +404,8 @@ main(int argc, char **argv){
 	signal(SIGTERM, signal_handler);
 
 	//printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());
-	nb_ports = nb_ports = rte_eth_dev_count_avail();
+	nb_ports = rte_eth_dev_count_avail();
+	n_port = nb_ports;
 	if(nb_ports == 0)
 		rte_exit(EXIT_FAILURE,"No port available!!!\n");
 	ret = init_lcore();
