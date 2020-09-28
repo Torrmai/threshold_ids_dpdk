@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

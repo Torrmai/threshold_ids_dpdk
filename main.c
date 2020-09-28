@@ -25,10 +25,10 @@
 	nports*3*nb_txd +		\
 	nb_lcores*MEMPOOL_CACHE_SIZE),		\
 	(unsigned)8192)
-#define MAX_PKT_BURST 64
+#define MAX_PKT_BURST 128
 #define PREFETCH_OFFSET	3
-static uint16_t nb_rxd = 1024;
-static uint16_t nb_txd = 1024;
+static uint16_t nb_rxd = 128;
+static uint16_t nb_txd = 512;
 static uint64_t time_peroid = 10;
 static volatile bool force_quit;
 static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
@@ -104,11 +104,74 @@ struct basic_port_statistic{
 struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
 unsigned n_port;
 // init section
+int sym_hash_enable(int port_id, uint32_t ftype, enum rte_eth_hash_function function)
+{
+    struct rte_eth_hash_filter_info info;
+    int ret = 0;
+    uint32_t idx = 0;
+    uint32_t offset = 0;
+
+    memset(&info, 0, sizeof(info));
+
+    ret = rte_eth_dev_filter_supported(port_id, RTE_ETH_FILTER_HASH);
+    if (ret < 0) {
+        rte_exit(EXIT_FAILURE,"RTE_ETH_FILTER_HASH not supported on port: %d",
+                         port_id);
+        return ret;
+    }
+
+    info.info_type = RTE_ETH_HASH_FILTER_GLOBAL_CONFIG;
+    info.info.global_conf.hash_func = function;
+
+    idx = ftype / UINT64_BIT;
+    offset = ftype % UINT64_BIT;
+    info.info.global_conf.valid_bit_mask[idx] |= (1ULL << offset);
+    info.info.global_conf.sym_hash_enable_mask[idx] |=
+                        (1ULL << offset);
+
+    ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_HASH,
+                                  RTE_ETH_FILTER_SET, &info);
+    if (ret < 0)
+    {
+        rte_exit(EXIT_FAILURE,"Cannot set global hash configurations"
+                        "on port %u", port_id);
+        return ret;
+    }
+
+    return 0;
+}
+
+int sym_hash_set(int port_id, int enable)
+{
+    int ret = 0;
+    struct rte_eth_hash_filter_info info;
+
+    memset(&info, 0, sizeof(info));
+
+    ret = rte_eth_dev_filter_supported(port_id, RTE_ETH_FILTER_HASH);
+    if (ret < 0) {
+        rte_exit(EXIT_FAILURE,"RTE_ETH_FILTER_HASH not supported on port: %d",
+                         port_id);
+        return ret;
+    }
+
+    info.info_type = RTE_ETH_HASH_FILTER_SYM_HASH_ENA_PER_PORT;
+    info.info.enable = enable;
+    ret = rte_eth_dev_filter_ctrl(port_id, RTE_ETH_FILTER_HASH,
+                        RTE_ETH_FILTER_SET, &info);
+
+    if (ret < 0)
+    {
+        rte_exit(EXIT_FAILURE,"Cannot set symmetric hash enable per port "
+                        "on port %u", port_id);
+        return ret;
+    }
+
+    return 0;
+}
 int
 init_mem(uint16_t portid, unsigned int nb_mbuf)
 {
-	struct lcore_conf *qconf;
-	int socketid;
 	unsigned lcore_id;
 	char s[64];
 
@@ -117,16 +180,15 @@ init_mem(uint16_t portid, unsigned int nb_mbuf)
 			continue;
 
 		if (pktmbuf_pool[portid]== NULL) {
-			snprintf(s, sizeof(s), "mbuf_pool_%d:%d",
-				 portid, socketid);
+			snprintf(s, sizeof(s), "mbuf_pool_%d:==",
+				 portid);
 			pktmbuf_pool[portid] =
 				rte_pktmbuf_pool_create(s, nb_mbuf,
 					MEMPOOL_CACHE_SIZE, 0,
-					RTE_MBUF_DEFAULT_BUF_SIZE, socketid);
+					RTE_MBUF_DEFAULT_BUF_SIZE, 0);
 			if (pktmbuf_pool[portid] == NULL)
 				rte_exit(EXIT_FAILURE,
-					"Cannot init mbuf pool on  %d\n",
-					socketid);
+					"Cannot init mbuf pool\n");
 		}
 	}
 	return 0;
@@ -164,6 +226,13 @@ init_port(){
 		}
 		ret = rte_eth_dev_configure(portid, nb_rx_queue,
 					(uint16_t)nb_lcores, &local_port_conf);// 3 queues for both rx and tx
+		sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_TCP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
+		sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_UDP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
+		sym_hash_enable(portid, RTE_ETH_FLOW_FRAG_IPV4, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
+		sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_SCTP, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
+		sym_hash_enable(portid, RTE_ETH_FLOW_NONFRAG_IPV4_OTHER, RTE_ETH_HASH_FUNCTION_TOEPLITZ);
+
+		sym_hash_set(portid, 1);
 		if(ret < 0){
 			return ret;
 		}
@@ -184,6 +253,7 @@ init_port(){
 		ret = init_mem(portid,NB_MBUF(1));
 		if(ret < 0)
 			rte_exit(EXIT_FAILURE,"can't init mem\n");
+		memset(&port_stat, 0, sizeof(port_stat));
 		/* init one TX queue per couple (lcore,port) */
 		queueid = 0;
 		for (lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++) {
@@ -224,7 +294,7 @@ init_port(){
 			portid = qconf->rx_queue_list[queue].port_id;
 			queueid = qconf->rx_queue_list[queue].queue_id;
 
-			printf("rxq=%d,%d,%d ", portid, queueid, 0);
+			printf("rxq=%d,%d ", portid, queueid);
 			fflush(stdout);
 
 			ret = rte_eth_dev_info_get(portid, &dev_info);
@@ -267,7 +337,54 @@ init_lcore(void){
         }
     }
     return 0;
+}static void
+check_all_ports_link_status()
+{
+#define CHECK_INTERVAL 100 /* 100ms */
+#define MAX_CHECK_TIME 90 /* 9s (90 * 100ms) in total */
+	uint16_t portid;
+	uint8_t count, all_ports_up, print_flag = 0;
+	struct rte_eth_link link;
+	int ret;
+
+	printf("\nChecking link status");
+	fflush(stdout);
+	for (count = 0; count <= MAX_CHECK_TIME; count++) {
+		if (force_quit)
+			return;
+		all_ports_up = 1;
+		RTE_ETH_FOREACH_DEV(portid) {
+			if (force_quit)
+				return;
+			memset(&link, 0, sizeof(link));
+			ret = rte_eth_link_get_nowait(portid, &link);
+			if (ret < 0) {
+				all_ports_up = 0;
+				if (print_flag == 1)
+					printf("Port %u link get failed: %s\n",
+						portid, rte_strerror(-ret));
+				continue;
+			}
+
+		}
+		/* after finally printing all link status, get out */
+		if (print_flag == 1)
+			break;
+
+		if (all_ports_up == 0) {
+			printf(".");
+			fflush(stdout);
+			rte_delay_ms(CHECK_INTERVAL);
+		}
+
+		/* set the print_flag if all ports up or timeout */
+		if (all_ports_up == 1 || count == (MAX_CHECK_TIME - 1)) {
+			print_flag = 1;
+			printf("done\n");
+		}
+	}
 }
+
 //end of init section
 //utility section
 static void
@@ -303,10 +420,10 @@ print_stats(uint64_t tim)
 		}
 		printf("\nStatistics for port %u ------------------------------"
 			   "\nPackets received of this period: %20"PRIu64
-			   "\nSize of this peroid: %21"PRIu64,
+			   "\nSize of this peroid (Mbits): %10"PRIu64,
 			   portid,
 			   port_stat[portid].rx_packet,
-			   port_stat[portid].size
+			   (port_stat[portid].size*8)/1000000
 			   );
 
 		total_size+= port_stat[portid].size;
@@ -316,9 +433,9 @@ print_stats(uint64_t tim)
 	}
 	printf("\nAggregate statistics ==============================="
 		   "\nTotal packets received: %14"PRIu64
-		   "\nTotal size: %15"PRIu64,
+		   "\nTotal size(Mbit): %15"PRIu64,
 		   total_packets_rx,
-		   total_size);
+		   (total_size*8)/1000000);
 	printf("\n====================================================\n");
 }
 //process section
@@ -345,7 +462,6 @@ main_loop(void)
 		printf("RX port for %u lcore is %u (Que id is %u)\n",lcore_id,portid,queid);
 	}
 	printf("\n\n");
-	//printf("Starting to listen..................\n");
 	prev_tsc = 0;
 	timer_tsc = 0;
 	while (!force_quit)
@@ -354,21 +470,24 @@ main_loop(void)
 		//process rx queue
 		diff_tsc = curr_tsc - prev_tsc;
 		for(unsigned i = 0; i < qconf -> n_rx_queue;i++){
-			portid = qconf->rx_queue_list[i].port_id;
-			queid = qconf->rx_queue_list[i].queue_id;
+			rx_que_ptr = &qconf->rx_queue_list[i];
+			portid = rx_que_ptr->port_id;
+			queid = rx_que_ptr->queue_id;
 			nb_rx = rte_eth_rx_burst(portid,queid,pkts_burst,MAX_PKT_BURST);
 			if(unlikely(nb_rx == 0)){
-				//printf("%u lcore has no incoming packet\n",lcore_id);
-				//usleep(2); debug goodies :)
+				//usleep(10);
 				continue;
 			}
 			rte_atomic64_add(&port_stat[portid].rx_packet,nb_rx);
-			for(j = 0;j<nb_rx;j++){
-				rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[j],void *));
+			for(unsigned j = 0;j<nb_rx;j++){
+				rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[j], void *));
 				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
 				rte_pktmbuf_free(pkts_burst[j]);
 			}
 		}
+/* 			for (; j < nb_rx; j++)
+				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
+				rte_pktmbuf_free(pkts_burst[j]); */
 		prev_tsc = curr_tsc;
 		timer_tsc += diff_tsc;
 		if(unlikely(timer_tsc >= time_peroid)){
@@ -438,6 +557,7 @@ main(int argc, char **argv){
 				rte_strerror(-ret), portid);
 		printf("Done\n");
 	}
+	check_all_ports_link_status();
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
