@@ -16,7 +16,7 @@
 #include <rte_hash.h>
 #include <rte_jhash.h>
 #include <rte_eth_ctrl.h>
-
+#define RECORD_ENTIRES 1000000
 #define MAX_RX_QUEUE_PER_LCORE 1024
 #define MEMPOOL_CACHE_SIZE 256
 #define NB_MBUF(nports) RTE_MAX(	\
@@ -102,6 +102,19 @@ struct basic_port_statistic{
 	uint64_t size;
 }__rte_cache_aligned;
 struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
+struct usage_stat{
+	uint64_t n_pkt;
+	uint64_t size_of_this_p;
+};
+struct max_mem{
+	uint32_t ipv4_addr;
+	uint64_t n_pkt;
+	uint64_t size_of_this_p;
+};
+static struct usage_stat ipv4_stat[RECORD_ENTIRES];
+static struct max_mem max_stat[3];
+struct rte_hash *hash_tb;
+struct rte_hash_parameters params;
 unsigned n_port;
 // init section
 int sym_hash_enable(int port_id, uint32_t ftype, enum rte_eth_hash_function function)
@@ -433,17 +446,66 @@ print_stats(uint64_t tim)
 	}
 	printf("\nAggregate statistics ==============================="
 		   "\nTotal packets received: %14"PRIu64
-		   "\nTotal size(Mbit): %15"PRIu64,
+		   "\nTotal size(Mbit): %15"PRIu64
+		   "\nCandidate %"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
 		   total_packets_rx,
-		   (total_size*8)/1000000);
+		   (total_size*8)/1000000,
+		   (uint8_t)(max_stat[0].ipv4_addr & 0xff),
+		   (uint8_t)((max_stat[0].ipv4_addr >> 8)&0xff),
+		   (uint8_t)((max_stat[0].ipv4_addr >> 16)&0xff),
+		   (uint8_t)((max_stat[0].ipv4_addr >> 24)&0xff));
 	printf("\n====================================================\n");
 }
 //process section
+static void
+process_data(struct rte_mbuf *data,unsigned portid){
+	int res,res2;
+	struct rte_ether_hdr *l2_hdr;
+	uint16_t eth_type;
+	uint32_t src,dst;
+	l2_hdr = rte_pktmbuf_mtod(data, struct rte_ether_hdr *);
+	eth_type = rte_be_to_cpu_16(l2_hdr->ether_type);
+	struct rte_ipv4_hdr *ipv4_hdr;
+	switch (eth_type)
+	{
+	case RTE_ETHER_TYPE_IPV4:
+		ipv4_hdr = (struct rte_ipv4_hdr *)((char *)l2_hdr +(int)(sizeof(struct rte_ether_hdr)));
+		src = ipv4_hdr->src_addr;
+		dst = ipv4_hdr->dst_addr;
+		res = rte_hash_lookup(hash_tb,(void *)&src);
+		//printf("%d\n",res);
+		if(res < 0){
+			if(res == -EINVAL){
+				printf("Error\n");
+			}
+			if(res == -2){
+				res2 = rte_hash_add_key(hash_tb,(void *)&src);
+				printf("add\n");
+			}
+		}
+		else{
+			//printf("%"PRIu32"\n",src);
+			rte_atomic64_add(&ipv4_stat[res].n_pkt,1);
+			rte_atomic64_add(&ipv4_stat[res].size_of_this_p,data->pkt_len);
+			if(ipv4_stat[res].size_of_this_p > max_stat[0].size_of_this_p){
+				max_stat[0].ipv4_addr = src;
+				max_stat[0].n_pkt = ipv4_stat[res].n_pkt;
+				max_stat[0].size_of_this_p = ipv4_stat[res].size_of_this_p;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	rte_atomic64_add(&port_stat[portid].size,data->pkt_len);
+	rte_pktmbuf_free(data);
+}
 static void
 main_loop(void)
 {
 	unsigned lcore_id,nb_rx;
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
+	struct rte_mbuf *m;
 	struct lcore_conf *qconf;
 	struct lcore_rx_queue *rx_que_ptr;
 	uint64_t prev_tsc,diff_tsc,curr_tsc,timer_tsc;
@@ -459,7 +521,10 @@ main_loop(void)
 		rx_que_ptr = &qconf->rx_queue_list[i];
 		portid = rx_que_ptr->port_id;
 		queid = rx_que_ptr->queue_id;
-		printf("RX port for %u lcore is %u (Que id is %u)\n",lcore_id,portid,queid);
+		printf("RX port for %u lcore is %u (Queue id is %u)\n",lcore_id,portid,queid);
+	}
+	for (unsigned i =0;i<qconf->n_tx_port;i++){
+		printf("TX port for %u lcore is %u (Queue id is %u)\n",lcore_id,qconf->tx_port_id[i],qconf->tx_queue_id[i]);
 	}
 	printf("\n\n");
 	prev_tsc = 0;
@@ -480,9 +545,9 @@ main_loop(void)
 			}
 			rte_atomic64_add(&port_stat[portid].rx_packet,nb_rx);
 			for(unsigned j = 0;j<nb_rx;j++){
-				rte_prefetch0(rte_pktmbuf_mtod(pkts_burst[j], void *));
-				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
-				rte_pktmbuf_free(pkts_burst[j]);
+				m = pkts_burst[j];
+				rte_prefetch0(rte_pktmbuf_mtod(m, void *));
+				process_data(pkts_burst[j],portid);
 			}
 		}
 /* 			for (; j < nb_rx; j++)
@@ -556,6 +621,17 @@ main(int argc, char **argv){
 				"rte_eth_promiscuous_enable: err=%s, port=%u\n",
 				rte_strerror(-ret), portid);
 		printf("Done\n");
+	}
+	bzero(&params,sizeof(params));
+	params.name = "ipv4_hash";
+	params.entries = RECORD_ENTIRES;
+	params.key_len = sizeof(uint32_t);
+	params.hash_func = rte_jhash;
+	params.hash_func_init_val = 0;
+	hash_tb = rte_hash_create(&params);
+	if(!hash_tb){
+		fprintf(stderr,"create hash failed\n");
+		return 1;
 	}
 	check_all_ports_link_status();
 	ret = 0;
