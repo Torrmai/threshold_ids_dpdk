@@ -162,4 +162,5 @@ dep_main.o = /home/chanawat/project/main.c /usr/include/stdc-predef.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ethdev_core.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_hash.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_jhash.h \
- /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eth_ctrl.h
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eth_ctrl.h \
+ /home/chanawat/project/data_structure.h

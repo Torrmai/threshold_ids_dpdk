@@ -6,6 +6,7 @@ APP = senior_backend
 
 # all source are stored in SRCS-y
 SRCS-y := main.c
+SRCS-y += data_structure.c
 #SRCS-y += datainterface.c
 #SRC-y  += count_min_sketch.c #https://github.com/barrust/count-min-sketch.git
 # Build using pkg-config variables if possible
