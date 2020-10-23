@@ -1,4 +1,4 @@
-dep_data_structure.o = /home/chanawat/project/data_structure.c \
+dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /usr/include/stdc-predef.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_config.h \
  /usr/include/stdio.h /usr/include/features.h /usr/include/sys/cdefs.h \
@@ -18,6 +18,7 @@ dep_data_structure.o = /home/chanawat/project/data_structure.c \
  /usr/include/bits/sigset.h /usr/include/bits/time.h \
  /usr/include/sys/sysmacros.h /usr/include/bits/pthreadtypes.h \
  /usr/include/alloca.h /usr/include/bits/stdlib-float.h \
- /usr/include/sys/queue.h /home/chanawat/project/data_structure.h \
+ /usr/include/sys/queue.h \
+ /home/chanawat/threshold_ips_dpdk/data_structure.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdint.h \
  /usr/include/stdint.h /usr/include/bits/wchar.h

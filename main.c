@@ -17,7 +17,7 @@
 #include <rte_jhash.h>
 #include <rte_eth_ctrl.h>
 
-#include "data_structure.h"
+
 #define RECORD_ENTIRES 1000000
 #define MAX_RX_QUEUE_PER_LCORE 1024
 #define MEMPOOL_CACHE_SIZE 256
@@ -113,10 +113,10 @@ struct max_mem{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 };
-static struct usage_stat ipv4_stat[RECORD_ENTIRES];
+static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 static struct max_mem max_stat[3];
-struct rte_hash *hash_tb;
-struct rte_hash_parameters params;
+struct rte_hash *hash_tb[2];
+
 unsigned n_port;
 int isAdded = 1;
 // init section
@@ -422,6 +422,7 @@ print_stats(uint64_t tim)
 	total_packets_rx = 0;
 	const char clr[] = { 27, '[', '2', 'J', '\0' };
 	const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
+	isAdded = !isAdded;
 		/* Clear screen and move to top left */
 	printf("%s%s", clr, topLeft);
 
@@ -468,13 +469,11 @@ print_stats(uint64_t tim)
 		max_stat[i].size_of_this_p = 0;
 		max_stat[i].n_pkt = 0;
 	}
-	isAdded = 0;
-	rte_hash_reset(hash_tb);
-	isAdded = 1;
+	rte_hash_reset(hash_tb[!isAdded]);
 }
 //process section
 static void
-process_data(struct rte_mbuf *data,unsigned portid,entry_v4 *it){
+process_data(struct rte_mbuf *data,unsigned portid){
 	int res,res2;
 	struct rte_ether_hdr *l2_hdr;
 	uint16_t eth_type;
@@ -488,40 +487,34 @@ process_data(struct rte_mbuf *data,unsigned portid,entry_v4 *it){
 		ipv4_hdr = (struct rte_ipv4_hdr *)((char *)l2_hdr +(int)(sizeof(struct rte_ether_hdr)));
 		src = ipv4_hdr->src_addr;
 		dst = ipv4_hdr->dst_addr;
-		if(isAdded == 1){
-			res = rte_hash_lookup(hash_tb,(void *)&src);
-			//printf("%d\n",res);
-			if(res < 0){
-				if(res == -EINVAL){
-					printf("Error\n");
-				}
-				if(res == -2){
-					res2 = rte_hash_add_key(hash_tb,(void *)&src);
-				}
+		res = rte_hash_lookup(hash_tb[isAdded],(void *)&src);
+		//printf("%d\n",res);
+		if(res < 0){
+			if(res == -EINVAL){
+				printf("Error\n");
 			}
-			else{
-				rte_atomic64_add(&ipv4_stat[res].size_of_this_p,data->pkt_len);
-				rte_atomic64_add(&ipv4_stat[res].n_pkt,1);
-				if(ipv4_stat[res].size_of_this_p > max_stat[0].size_of_this_p){
-					max_stat[0].ipv4_addr = src;
-					max_stat[0].size_of_this_p = ipv4_stat[res].size_of_this_p;
-					max_stat[0].n_pkt = ipv4_stat[res].n_pkt;
-				}
-				else if(ipv4_stat[res].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res].size_of_this_p > max_stat[1].size_of_this_p){
-					max_stat[1].ipv4_addr = src;
-					max_stat[1].size_of_this_p = ipv4_stat[res].size_of_this_p;
-					max_stat[1].n_pkt = ipv4_stat[res].n_pkt;
-				}
-				else if(ipv4_stat[res].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res].size_of_this_p > max_stat[2].size_of_this_p){
-					max_stat[2].ipv4_addr = src;
-					max_stat[2].size_of_this_p = ipv4_stat[res].size_of_this_p;
-					max_stat[2].n_pkt = ipv4_stat[res].n_pkt;
-				}
+			if(res == -2){
+				res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&src);
 			}
 		}
 		else{
-			//printf("%d\n",isAdded);
-			add_tmp_v4(src,data->pkt_len,&it);
+			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
+			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
+				max_stat[0].ipv4_addr = src;
+				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
+			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
+				max_stat[1].ipv4_addr = src;
+				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
+			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
+				max_stat[2].ipv4_addr = src;
+				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
 		}
 		break;
 	default:
@@ -543,8 +536,6 @@ main_loop(void)
 	qconf = &lcore_conf_arr[lcore_id];
 	unsigned queid,j;
 	unsigned portid;
-	entry_v4 elem;
-	TAILQ_INIT(&elem.head);
 	if(qconf ->n_rx_queue == 0){
 		printf("lcore %u has nothing to do\n",lcore_id);
 		return;
@@ -579,7 +570,7 @@ main_loop(void)
 			for(unsigned j = 0;j<nb_rx;j++){
 				m = pkts_burst[j];
 				rte_prefetch0(rte_pktmbuf_mtod(m, void *));
-				process_data(pkts_burst[j],portid,&elem);
+				process_data(pkts_burst[j],portid);
 			}
 		}
 /* 			for (; j < nb_rx; j++)
@@ -654,15 +645,33 @@ main(int argc, char **argv){
 				rte_strerror(-ret), portid);
 		printf("Done\n");
 	}
-	bzero(&params,sizeof(params));
-	params.name = "ipv4_hash";
-	params.entries = RECORD_ENTIRES;
-	params.key_len = sizeof(uint32_t);
-	params.hash_func = rte_jhash;
-	params.hash_func_init_val = 0;
-	hash_tb = rte_hash_create(&params);
-	if(!hash_tb){
-		fprintf(stderr,"create hash failed\n");
+	struct rte_hash_parameters params1 = {
+		.name = "ipv4_hash0",
+		.entries = RECORD_ENTIRES,
+		.key_len = sizeof(uint32_t),
+		.hash_func = rte_jhash,
+		.hash_func_init_val = 0,
+		.socket_id = 0,
+
+	};
+	struct rte_hash_parameters params2 =
+	{
+		.name = "ipv4_hash1",
+		.entries = RECORD_ENTIRES,
+		.key_len = sizeof(uint32_t),
+		.hash_func = rte_jhash,
+		.hash_func_init_val = 0,
+		.socket_id = 0,
+	};
+	
+	hash_tb[0] = rte_hash_create(&params1);
+	if(!hash_tb[0]){
+		fprintf(stderr,"create hash0 failed\n");
+		return 1;
+	}
+	hash_tb[1] = rte_hash_create(&params2);
+	if(!hash_tb[1]){
+		fprintf(stderr,"create hash1 failed\n");
 		return 1;
 	}
 	check_all_ports_link_status();
@@ -681,6 +690,10 @@ main(int argc, char **argv){
 		rte_eth_dev_close(portid);
 		printf(" Done\n");
 	}
-	rte_hash_free(hash_tb);
+	for (int i = 0; i < 2; i++)
+	{
+		/* code */
+		rte_hash_free(hash_tb[i]);
+	}
 	printf("Bye...\n");
 }
