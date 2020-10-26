@@ -13,6 +13,8 @@
 #include <rte_mbuf.h>
 #include <rte_ether.h>
 #include <rte_ip.h>
+#include <rte_udp.h>
+#include <rte_tcp.h>
 #include <rte_hash.h>
 #include <rte_jhash.h>
 #include <rte_eth_ctrl.h>
@@ -20,6 +22,8 @@
 
 #define RECORD_ENTIRES 1000000
 #define MAX_RX_QUEUE_PER_LCORE 1024
+#define MAX_TX_QUEUE_PER_LCORE 1024
+#define BURST_TX_DRAIN_US 100
 #define MEMPOOL_CACHE_SIZE 256
 #define NB_MBUF(nports) RTE_MAX(	\
 	(nports*nb_rx_queue*nb_rxd +		\
@@ -65,7 +69,7 @@ struct lcore_conf{
 	struct lcore_rx_queue rx_queue_list[MAX_RX_QUEUE_PER_LCORE];
 	uint16_t n_tx_port;
 	uint16_t tx_port_id[RTE_MAX_ETHPORTS];
-	uint16_t tx_queue_id[RTE_MAX_ETHPORTS];
+	uint16_t tx_queue_id[MAX_TX_QUEUE_PER_LCORE];
 }__rte_cache_aligned;
 static struct lcore_conf lcore_conf_arr[RTE_MAX_LCORE];
 #define RSS_HASH_KEY_LENGTH 40
@@ -98,6 +102,8 @@ static struct rte_eth_conf port_conf = {
     },
 };
 static struct rte_mempool *pktmbuf_pool[RTE_MAX_ETHPORTS];
+static struct rte_ether_addr port_addr[RTE_MAX_ETHPORTS];
+static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS][3];
 //statistical related data type
 struct basic_port_statistic{
 	uint64_t rx_packet;
@@ -107,12 +113,21 @@ struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
 struct usage_stat{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
-};
+}__rte_cache_aligned;
 struct max_mem{
 	uint32_t ipv4_addr;
+	uint8_t l3_pro;
+	uint16_t port;
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 };
+struct compo_keyV4
+{
+	uint32_t ipv4_addr;
+	uint8_t l3_pro;
+	uint16_t port;
+}__rte_cache_aligned;
+
 static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 static struct max_mem max_stat[3];
 struct rte_hash *hash_tb[2];
@@ -229,6 +244,10 @@ init_port(){
 		ret = rte_eth_dev_info_get(portid, &dev_info);
 		if(ret != 0){
 			rte_exit(EXIT_FAILURE,"Error geting info of port %u\n",portid);
+		}
+		ret = rte_eth_macaddr_get(portid,&ports_eth_addr[portid]);
+		if(ret != 0){
+			rte_exit(EXIT_FAILURE,"Error geting mac addr of port %u\n",portid);
 		}
 		local_port_conf.rx_adv_conf.rss_conf.rss_hf &=
 			dev_info.flow_type_rss_offloads;
@@ -415,6 +434,7 @@ signal_handler(int signum)
 static void
 print_stats(uint64_t tim)
 {
+	//debug propose
 	uint64_t total_size, total_packets_rx;
 	unsigned portid;
 	float clk_rate = rte_get_timer_hz() * 1.0;
@@ -454,12 +474,14 @@ print_stats(uint64_t tim)
 		   (total_size*8)/1000000);
 	for (int i = 0; i < 3; i++)
 	{
-		printf("\nCandidate #%d %"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" With size of %"PRIu64" (Mbit)",
+		printf("\nRanked #%d %5"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8":%"PRIu16"\t l3 protocol: % "PRIu8" With size of %5"PRIu64" (Mbit)",
 		i+1,
 		(uint8_t)(max_stat[i].ipv4_addr & 0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 8)&0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 16)&0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 24)&0xff),
+		(max_stat[i].port),
+		(max_stat[i].l3_pro),
 		(max_stat[i].size_of_this_p*8)/1000000);
 	}
 	
@@ -471,6 +493,25 @@ print_stats(uint64_t tim)
 	}
 	rte_hash_reset(hash_tb[!isAdded]);
 }
+static void
+forward_data(struct rte_mbuf *data,unsigned portid,uint16_t queueid){
+	int sent;
+	struct rte_eth_dev_tx_buffer *buffer;
+	struct rte_ether_hdr *l2_hdr;
+	void *tmp;
+
+	l2_hdr = rte_pktmbuf_mtod(data, struct rte_ether_hdr *);
+
+	/* 02:00:00:00:00:xx */
+	tmp = &l2_hdr->d_addr.addr_bytes[0];
+	*((uint64_t *)tmp) = 0x000000000002 + ((uint64_t)portid << 40);
+
+	/* src addr */
+	rte_ether_addr_copy(&ports_eth_addr[portid], &l2_hdr->s_addr);
+	buffer = tx_buffer[portid][queueid];
+	sent = rte_eth_tx_buffer(portid,queueid,buffer,data);
+	
+}
 //process section
 static void
 process_data(struct rte_mbuf *data,unsigned portid){
@@ -481,20 +522,39 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	l2_hdr = rte_pktmbuf_mtod(data, struct rte_ether_hdr *);
 	eth_type = rte_be_to_cpu_16(l2_hdr->ether_type);
 	struct rte_ipv4_hdr *ipv4_hdr;
+	struct rte_udp_hdr *udp_data;
+	struct rte_tcp_hdr  *tcp_data;
+	struct compo_keyV4 tmp_key;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
 		ipv4_hdr = (struct rte_ipv4_hdr *)((char *)l2_hdr +(int)(sizeof(struct rte_ether_hdr)));
 		src = ipv4_hdr->src_addr;
 		dst = ipv4_hdr->dst_addr;
-		res = rte_hash_lookup(hash_tb[isAdded],(void *)&src);
+		tmp_key.ipv4_addr = src;
+		tmp_key.l3_pro = ipv4_hdr->next_proto_id;
+		switch (ipv4_hdr->next_proto_id)
+		{
+		case 0x11:
+			udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+			tmp_key.port = udp_data->dst_port;
+			break;
+		case 0x06:
+			tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+			tmp_key.port = tcp_data->dst_port;
+			break;
+		default:
+			tmp_key.port = 0;
+			break;
+		}
+		res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
 		//printf("%d\n",res);
 		if(res < 0){
 			if(res == -EINVAL){
 				printf("Error\n");
 			}
 			if(res == -2){
-				res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&src);
+				res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
 			}
 		}
 		else{
@@ -502,16 +562,22 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
 			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
 				max_stat[0].ipv4_addr = src;
+				max_stat[0].port = tmp_key.port;
+				max_stat[0].l3_pro = tmp_key.l3_pro;
 				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
 			}
 			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
 				max_stat[1].ipv4_addr = src;
+				max_stat[1].port = tmp_key.port;
+				max_stat[1].l3_pro = tmp_key.l3_pro;
 				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
 			}
 			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
 				max_stat[2].ipv4_addr = src;
+				max_stat[2].port = tmp_key.port;
+				max_stat[2].l3_pro = tmp_key.l3_pro;
 				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
 			}
@@ -529,9 +595,12 @@ main_loop(void)
 	unsigned lcore_id,nb_rx;
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
 	struct rte_mbuf *m;
+	int sent;
 	struct lcore_conf *qconf;
 	struct lcore_rx_queue *rx_que_ptr;
 	uint64_t prev_tsc,diff_tsc,curr_tsc,timer_tsc;
+	const uint64_t drain_tsc = (rte_get_tsc_hz() + US_PER_S - 1) / US_PER_S *
+			BURST_TX_DRAIN_US;
 	lcore_id = rte_lcore_id();
 	qconf = &lcore_conf_arr[lcore_id];
 	unsigned queid,j;
@@ -552,11 +621,29 @@ main_loop(void)
 	printf("\n\n");
 	prev_tsc = 0;
 	timer_tsc = 0;
+	struct rte_eth_dev_tx_buffer *buffer;
 	while (!force_quit)
 	{
 		curr_tsc = rte_rdtsc();
-		//process rx queue
 		diff_tsc = curr_tsc - prev_tsc;
+		/*if(unlikely(diff_tsc > drain_tsc)){
+			for(unsigned i = 0;i<qconf->n_tx_port;i++){
+				portid = qconf->tx_port_id[i];
+				buffer = tx_buffer[portid][qconf->tx_queue_id[i]];
+				sent = rte_eth_tx_buffer_flush(portid,qconf->tx_queue_id[i],buffer);
+			}
+		}*/
+		timer_tsc += diff_tsc;
+		if(unlikely(timer_tsc >= time_peroid)){
+			/* do this only on master core */
+			if (lcore_id == rte_get_master_lcore()) {
+				print_stats(timer_tsc);
+				/* reset the timer */
+				timer_tsc = 0;
+			}
+		}
+		prev_tsc = curr_tsc;
+		//process rx queue
 		for(unsigned i = 0; i < qconf -> n_rx_queue;i++){
 			rx_que_ptr = &qconf->rx_queue_list[i];
 			portid = rx_que_ptr->port_id;
@@ -571,21 +658,12 @@ main_loop(void)
 				m = pkts_burst[j];
 				rte_prefetch0(rte_pktmbuf_mtod(m, void *));
 				process_data(pkts_burst[j],portid);
+				//forward_data(pkts_burst[j],!qconf->tx_port_id[i],qconf->tx_queue_id[i]);
 			}
 		}
 /* 			for (; j < nb_rx; j++)
 				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
 				rte_pktmbuf_free(pkts_burst[j]); */
-		prev_tsc = curr_tsc;
-		timer_tsc += diff_tsc;
-		if(unlikely(timer_tsc >= time_peroid)){
-			/* do this only on master core */
-			if (lcore_id == rte_get_master_lcore()) {
-				print_stats(timer_tsc);
-				/* reset the timer */
-				timer_tsc = 0;
-			}
-		}
 	}
 	
 
@@ -648,7 +726,7 @@ main(int argc, char **argv){
 	struct rte_hash_parameters params1 = {
 		.name = "ipv4_hash0",
 		.entries = RECORD_ENTIRES,
-		.key_len = sizeof(uint32_t),
+		.key_len = sizeof(struct compo_keyV4),
 		.hash_func = rte_jhash,
 		.hash_func_init_val = 0,
 		.socket_id = 0,
@@ -658,7 +736,7 @@ main(int argc, char **argv){
 	{
 		.name = "ipv4_hash1",
 		.entries = RECORD_ENTIRES,
-		.key_len = sizeof(uint32_t),
+		.key_len = sizeof(struct compo_keyV4),
 		.hash_func = rte_jhash,
 		.hash_func_init_val = 0,
 		.socket_id = 0,
