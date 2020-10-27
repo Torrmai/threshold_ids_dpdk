@@ -33,9 +33,12 @@
 	(unsigned)8192)
 #define MAX_PKT_BURST 128
 #define PREFETCH_OFFSET	3
+#define CMD_LINE_OPT_MAC_UPDATING "mac-updating"
+#define CMD_LINE_OPT_NO_MAC_UPDATING "no-mac-updating"
 static uint16_t nb_rxd = 128;
 static uint16_t nb_txd = 512;
 static uint64_t time_peroid = 10;
+static int mac_updating = 1;
 static volatile bool force_quit;
 static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
 typedef struct lcore_rx_queue lcore_rx_queue;
@@ -104,6 +107,16 @@ static struct rte_eth_conf port_conf = {
 static struct rte_mempool *pktmbuf_pool[RTE_MAX_ETHPORTS];
 static struct rte_ether_addr port_addr[RTE_MAX_ETHPORTS];
 static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS][3];
+static const char short_options[]=
+	"V:" /*turn on or off verbose mode*/
+	"T:"/*set timer peroid*/
+	;
+static const struct option lgopts[] = {
+	{ CMD_LINE_OPT_MAC_UPDATING, no_argument, &mac_updating, 1},
+	{ CMD_LINE_OPT_NO_MAC_UPDATING, no_argument, &mac_updating, 0},
+	{NULL, 0, 0, 0}
+};
+static int isVerbose = 0;
 //statistical related data type
 struct basic_port_statistic{
 	uint64_t rx_packet;
@@ -135,6 +148,64 @@ struct rte_hash *hash_tb[2];
 unsigned n_port;
 int isAdded = 1;
 // init section
+static int
+parse_verbose(const char *v_arg){
+	char *end = NULL;
+	unsigned long n;
+	n = strtol(v_arg,&end,10);
+	if ((v_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
+		return -1;
+	return n;
+}
+static int
+parse_timer(const char *t_arg){
+	char *end = NULL;
+	int t;
+	t = strtol(t_arg,&end,10);
+	if((t_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
+		return -1;
+	return t;
+}
+static int
+parse_args(int argc,char **argv){
+	int opt,ret,timer_sec;
+	char **argvopt;
+	int opt_index;
+	char *prgname = argv[0];
+	int tmp_time = 0;
+	argvopt = argv;
+	while ((opt = getopt_long(argc,argvopt,short_options,lgopts,&opt_index)) != EOF)
+	{
+		switch (opt)
+		{
+		case 'V':
+			/* code */
+			isVerbose = parse_verbose(optarg);
+			if(isVerbose <  0){
+				printf("invalid verbose option\n");
+				return -1;
+			}
+			break;
+		case 'T':
+			tmp_time = parse_timer(optarg);
+			if(tmp_time < 0){
+				printf("invalid timer option\n");
+				return -1;
+			}
+			time_peroid = tmp_time;
+			//return 0;
+			break;
+		case 0:
+			break;
+		default:
+			return 0;
+			printf("Using default app setting......\n");
+			break;
+		}
+
+	}
+	
+}
 int sym_hash_enable(int port_id, uint32_t ftype, enum rte_eth_hash_function function)
 {
     struct rte_eth_hash_filter_info info;
@@ -512,6 +583,20 @@ forward_data(struct rte_mbuf *data,unsigned portid,uint16_t queueid){
 	sent = rte_eth_tx_buffer(portid,queueid,buffer,data);
 	
 }
+//rfc 1812 check all code copy from l3fwd.h
+static int
+is_valid_ipv4_pkt(struct rte_ipv4_hdr *pkt,uint32_t len)
+{
+	if(len < sizeof(struct rte_ipv4_hdr))
+		return -1;
+	if((pkt->version_ihl >> 4) != 4)
+		return -3;
+	if((pkt->version_ihl & 0xf)<5)
+		return -4;
+	if(rte_cpu_to_be_16(pkt->total_length) < sizeof(struct rte_ipv4_hdr))
+		return -5;
+	return 0;
+}
 //process section
 static void
 process_data(struct rte_mbuf *data,unsigned portid){
@@ -533,53 +618,54 @@ process_data(struct rte_mbuf *data,unsigned portid){
 		dst = ipv4_hdr->dst_addr;
 		tmp_key.ipv4_addr = src;
 		tmp_key.l3_pro = ipv4_hdr->next_proto_id;
-		switch (ipv4_hdr->next_proto_id)
-		{
-		case 0x11:
-			udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-			tmp_key.port = udp_data->dst_port;
-			break;
-		case 0x06:
-			tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-			tmp_key.port = tcp_data->dst_port;
-			break;
-		default:
-			tmp_key.port = 0;
-			break;
-		}
-		res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
-		//printf("%d\n",res);
-		if(res < 0){
-			if(res == -EINVAL){
-				printf("Error\n");
+		if(is_valid_ipv4_pkt(ipv4_hdr,data->data_len) == 0){
+			switch (ipv4_hdr->next_proto_id)
+			{
+			case 0x11:
+				udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+				tmp_key.port = udp_data->dst_port;
+				break;
+			case 0x06:
+				tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+				tmp_key.port = tcp_data->dst_port;
+				break;
+			default:
+				tmp_key.port = 0;
+				break;
 			}
-			if(res == -2){
-				res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+			res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
+			if(res < 0){
+				if(res == -EINVAL){
+					printf("Error\n");
+				}
+				if(res == -2){
+					res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+				}
 			}
-		}
-		else{
-			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
-			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
-				max_stat[0].ipv4_addr = src;
-				max_stat[0].port = tmp_key.port;
-				max_stat[0].l3_pro = tmp_key.l3_pro;
-				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-			}
-			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
-				max_stat[1].ipv4_addr = src;
-				max_stat[1].port = tmp_key.port;
-				max_stat[1].l3_pro = tmp_key.l3_pro;
-				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-			}
-			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
-				max_stat[2].ipv4_addr = src;
-				max_stat[2].port = tmp_key.port;
-				max_stat[2].l3_pro = tmp_key.l3_pro;
-				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			else{
+				rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
+				rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+				if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
+					max_stat[0].ipv4_addr = src;
+					max_stat[0].port = tmp_key.port;
+					max_stat[0].l3_pro = tmp_key.l3_pro;
+					max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
+				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
+					max_stat[1].ipv4_addr = src;
+					max_stat[1].port = tmp_key.port;
+					max_stat[1].l3_pro = tmp_key.l3_pro;
+					max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
+				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
+					max_stat[2].ipv4_addr = src;
+					max_stat[2].port = tmp_key.port;
+					max_stat[2].l3_pro = tmp_key.l3_pro;
+					max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
 			}
 		}
 		break;
@@ -683,12 +769,16 @@ main(int argc, char **argv){
 	ret = rte_eal_init(argc,argv);
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE,"Invalid EAL params\n");
-	time_peroid *= rte_get_timer_hz();
+	argc -= ret;
+	argv += ret;
 	force_quit = false;
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
-
-	//printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());
+	ret = parse_args(argc,argv);
+	if(ret < 0)
+		rte_exit(EXIT_FAILURE,"Invalid APP params\n");
+	printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());
+	time_peroid *= rte_get_timer_hz();
 	nb_ports = rte_eth_dev_count_avail();
 	n_port = nb_ports;
 	if(nb_ports == 0)
