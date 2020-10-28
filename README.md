@@ -10,3 +10,5 @@ Here are main features
 # Dependency
 
 - dpdk 20.05
+
+# Some output can't disable such as initial status

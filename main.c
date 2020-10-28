@@ -20,7 +20,7 @@
 #include <rte_eth_ctrl.h>
 
 
-#define RECORD_ENTIRES 1000000
+#define RECORD_ENTIRES 1000000/4
 #define MAX_RX_QUEUE_PER_LCORE 1024
 #define MAX_TX_QUEUE_PER_LCORE 1024
 #define BURST_TX_DRAIN_US 100
@@ -110,6 +110,7 @@ static struct rte_eth_dev_tx_buffer *tx_buffer[RTE_MAX_ETHPORTS][3];
 static const char short_options[]=
 	"V:" /*turn on or off verbose mode*/
 	"T:"/*set timer peroid*/
+	"s:"/*sort by ...*/
 	;
 static const struct option lgopts[] = {
 	{ CMD_LINE_OPT_MAC_UPDATING, no_argument, &mac_updating, 1},
@@ -117,6 +118,7 @@ static const struct option lgopts[] = {
 	{NULL, 0, 0, 0}
 };
 static int isVerbose = 0;
+static int sortBY = 0;
 //statistical related data type
 struct basic_port_statistic{
 	uint64_t rx_packet;
@@ -144,12 +146,12 @@ struct compo_keyV4
 static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 static struct max_mem max_stat[3];
 struct rte_hash *hash_tb[2];
-
+//struct rte_hash *hash_tb_cli[2];
 unsigned n_port;
 int isAdded = 1;
 // init section
 static int
-parse_verbose(const char *v_arg){
+parse_to_base10(const char *v_arg){
 	char *end = NULL;
 	unsigned long n;
 	n = strtol(v_arg,&end,10);
@@ -158,21 +160,13 @@ parse_verbose(const char *v_arg){
 	return n;
 }
 static int
-parse_timer(const char *t_arg){
-	char *end = NULL;
-	int t;
-	t = strtol(t_arg,&end,10);
-	if((t_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
-		return -1;
-	return t;
-}
-static int
 parse_args(int argc,char **argv){
 	int opt,ret,timer_sec;
 	char **argvopt;
 	int opt_index;
 	char *prgname = argv[0];
 	int tmp_time = 0;
+	int tmp_sort = 0;
 	argvopt = argv;
 	while ((opt = getopt_long(argc,argvopt,short_options,lgopts,&opt_index)) != EOF)
 	{
@@ -180,14 +174,14 @@ parse_args(int argc,char **argv){
 		{
 		case 'V':
 			/* code */
-			isVerbose = parse_verbose(optarg);
+			isVerbose = parse_to_base10(optarg);
 			if(isVerbose <  0){
 				printf("invalid verbose option\n");
 				return -1;
 			}
 			break;
 		case 'T':
-			tmp_time = parse_timer(optarg);
+			tmp_time = parse_to_base10(optarg);
 			if(tmp_time < 0){
 				printf("invalid timer option\n");
 				return -1;
@@ -195,6 +189,12 @@ parse_args(int argc,char **argv){
 			time_peroid = tmp_time;
 			//return 0;
 			break;
+		case 's':
+			tmp_sort = parse_to_base10(optarg);
+			if(tmp_sort < 0){
+				printf("invalid sort option\n");
+				return -1;
+			}
 		case 0:
 			break;
 		default:
@@ -545,7 +545,7 @@ print_stats(uint64_t tim)
 		   (total_size*8)/1000000);
 	for (int i = 0; i < 3; i++)
 	{
-		printf("\nRanked #%d %5"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8":%"PRIu16"\t l3 protocol: % "PRIu8" With size of %5"PRIu64" (Mbit)",
+		printf("\nRanked #%d %3"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8":%"PRIu16"\t l3 protocol: % "PRIu8" With size of %3"PRIu64" (Mbit) and number of packet(s) %3"PRIu64,
 		i+1,
 		(uint8_t)(max_stat[i].ipv4_addr & 0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 8)&0xff),
@@ -553,7 +553,8 @@ print_stats(uint64_t tim)
 		(uint8_t)((max_stat[i].ipv4_addr >> 24)&0xff),
 		(max_stat[i].port),
 		(max_stat[i].l3_pro),
-		(max_stat[i].size_of_this_p*8)/1000000);
+		(max_stat[i].size_of_this_p*8)/1000000,
+		max_stat[i].n_pkt);
 	}
 	
 	printf("\n====================================================\n");
@@ -610,6 +611,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	struct rte_udp_hdr *udp_data;
 	struct rte_tcp_hdr  *tcp_data;
 	struct compo_keyV4 tmp_key;
+	uint16_t src_port = 0;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
@@ -624,47 +626,51 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			case 0x11:
 				udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
 				tmp_key.port = udp_data->dst_port;
+				src_port = udp_data->src_port;
 				break;
 			case 0x06:
 				tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
 				tmp_key.port = tcp_data->dst_port;
+				src_port = tcp_data->src_port;
 				break;
 			default:
 				tmp_key.port = 0;
 				break;
 			}
-			res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
-			if(res < 0){
-				if(res == -EINVAL){
-					printf("Error\n");
+			if(src_port < 1024){//temporary solution for checking server and client
+				res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
+				if(res < 0){
+					if(res == -EINVAL){
+						printf("Error\n");
+					}
+					if(res == -2){
+						res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+					}
 				}
-				if(res == -2){
-					res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
-				}
-			}
-			else{
-				rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
-				rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-				if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
-					max_stat[0].ipv4_addr = src;
-					max_stat[0].port = tmp_key.port;
-					max_stat[0].l3_pro = tmp_key.l3_pro;
-					max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-					max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-				}
-				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
-					max_stat[1].ipv4_addr = src;
-					max_stat[1].port = tmp_key.port;
-					max_stat[1].l3_pro = tmp_key.l3_pro;
-					max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-					max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-				}
-				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
-					max_stat[2].ipv4_addr = src;
-					max_stat[2].port = tmp_key.port;
-					max_stat[2].l3_pro = tmp_key.l3_pro;
-					max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-					max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				else{
+					rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
+					rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+					if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
+						max_stat[0].ipv4_addr = src;
+						max_stat[0].port = tmp_key.port;
+						max_stat[0].l3_pro = tmp_key.l3_pro;
+						max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+						max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+					}
+					else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
+						max_stat[1].ipv4_addr = src;
+						max_stat[1].port = tmp_key.port;
+						max_stat[1].l3_pro = tmp_key.l3_pro;
+						max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+						max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+					}
+					else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
+						max_stat[2].ipv4_addr = src;
+						max_stat[2].port = tmp_key.port;
+						max_stat[2].l3_pro = tmp_key.l3_pro;
+						max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+						max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+					}
 				}
 			}
 		}
@@ -723,7 +729,9 @@ main_loop(void)
 		if(unlikely(timer_tsc >= time_peroid)){
 			/* do this only on master core */
 			if (lcore_id == rte_get_master_lcore()) {
-				print_stats(timer_tsc);
+				if(isVerbose){
+					print_stats(timer_tsc);
+				}
 				/* reset the timer */
 				timer_tsc = 0;
 			}
@@ -736,7 +744,6 @@ main_loop(void)
 			queid = rx_que_ptr->queue_id;
 			nb_rx = rte_eth_rx_burst(portid,queid,pkts_burst,MAX_PKT_BURST);
 			if(unlikely(nb_rx == 0)){
-				//usleep(10);
 				continue;
 			}
 			rte_atomic64_add(&port_stat[portid].rx_packet,nb_rx);
@@ -747,9 +754,6 @@ main_loop(void)
 				//forward_data(pkts_burst[j],!qconf->tx_port_id[i],qconf->tx_queue_id[i]);
 			}
 		}
-/* 			for (; j < nb_rx; j++)
-				rte_atomic64_add(&port_stat[portid].size,pkts_burst[j]->pkt_len);
-				rte_pktmbuf_free(pkts_burst[j]); */
 	}
 	
 
