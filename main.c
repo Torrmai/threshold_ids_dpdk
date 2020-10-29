@@ -588,6 +588,57 @@ is_valid_ipv4_pkt(struct rte_ipv4_hdr *pkt,uint32_t len)
 }
 //process section
 static void
+add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3_pro)
+{
+	//add data to my defined array
+	struct compo_keyV4 tmp_key;
+	int res,res2;
+	tmp_key.port = port2;
+	tmp_key.l3_pro = l3_pro;
+	tmp_key.ipv4_addr = addr;
+	res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
+	if(res < 0){
+		if(res == -EINVAL){
+			printf("Error\n");
+		}
+		if(res == -2){
+			res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+			rte_atomic64_add(&ipv4_stat[res2][isAdded].size_of_this_p,size);
+			ipv4_stat[res2][isAdded].src_port = port1;
+			rte_atomic64_add(&ipv4_stat[res2][isAdded].n_pkt,1);
+			key_list[numkey[isAdded]][isAdded] = tmp_key;
+			numkey[isAdded]++;
+		}
+	}
+	else{
+		rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
+		rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+		if(isVerbose){
+			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
+				max_stat[0].ipv4_addr = addr;
+				max_stat[0].port = tmp_key.port;
+				max_stat[0].l3_pro = tmp_key.l3_pro;
+				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
+			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
+				max_stat[1].ipv4_addr = addr;
+				max_stat[1].port = tmp_key.port;
+				max_stat[1].l3_pro = tmp_key.l3_pro;
+				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
+			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
+				max_stat[2].ipv4_addr = addr;
+				max_stat[2].port = tmp_key.port;
+				max_stat[2].l3_pro = tmp_key.l3_pro;
+				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			}
+		}
+	}
+}
+static void
 process_data(struct rte_mbuf *data,unsigned portid){
 	int res,res2;
 	struct rte_ether_hdr *l2_hdr;
@@ -598,73 +649,38 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	struct rte_ipv4_hdr *ipv4_hdr;
 	struct rte_udp_hdr *udp_data;
 	struct rte_tcp_hdr  *tcp_data;
-	struct compo_keyV4 tmp_key;
 	uint16_t src_port = 0;
+	uint16_t dst_port = 0;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
 		ipv4_hdr = (struct rte_ipv4_hdr *)((char *)l2_hdr +(int)(sizeof(struct rte_ether_hdr)));
 		src = ipv4_hdr->src_addr;
 		dst = ipv4_hdr->dst_addr;
-		tmp_key.ipv4_addr = src;
-		tmp_key.l3_pro = ipv4_hdr->next_proto_id;
 		if(is_valid_ipv4_pkt(ipv4_hdr,data->data_len) == 0){
 			switch (ipv4_hdr->next_proto_id)
 			{
 			case 0x11:
 				udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-				tmp_key.port = udp_data->dst_port;
+				dst_port = udp_data->dst_port;
 				src_port = udp_data->src_port;
 				break;
 			case 0x06:
 				tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-				tmp_key.port = tcp_data->dst_port;
+				dst_port = tcp_data->dst_port;
 				src_port = tcp_data->src_port;
 				break;
 			default:
-				tmp_key.port = 0;
+				src_port = 0;
+				dst_port = 0;
 				break;
 			}
-			if(src_port < 1024){//temporary solution for checking server and client
-				res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
-				if(res < 0){
-					if(res == -EINVAL){
-						printf("Error\n");
-					}
-					if(res == -2){
-						res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
-						rte_atomic64_add(&ipv4_stat[res2][isAdded].size_of_this_p,data->pkt_len);
-						ipv4_stat[res2][isAdded].src_port = src_port;
-						rte_atomic64_add(&ipv4_stat[res2][isAdded].n_pkt,1);
-						key_list[numkey[isAdded]][isAdded] = tmp_key;
-						numkey[isAdded]++;
-					}
-				}
-				else{
-					rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,data->pkt_len);
-					rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-					if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
-						max_stat[0].ipv4_addr = src;
-						max_stat[0].port = tmp_key.port;
-						max_stat[0].l3_pro = tmp_key.l3_pro;
-						max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-						max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-					}
-					else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
-						max_stat[1].ipv4_addr = src;
-						max_stat[1].port = tmp_key.port;
-						max_stat[1].l3_pro = tmp_key.l3_pro;
-						max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-						max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-					}
-					else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
-						max_stat[2].ipv4_addr = src;
-						max_stat[2].port = tmp_key.port;
-						max_stat[2].l3_pro = tmp_key.l3_pro;
-						max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-						max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-					}
-				}
+			//check for server in both sides
+			if(src_port < 1024){
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id);
+			}
+			if(dst_port < 1024){
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id);
 			}
 		}
 		break;
