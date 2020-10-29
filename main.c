@@ -18,9 +18,9 @@
 #include <rte_hash.h>
 #include <rte_jhash.h>
 #include <rte_eth_ctrl.h>
+#include "data_structure.h"
 
-
-#define RECORD_ENTIRES 1000000/4
+#define RECORD_ENTIRES 2000
 #define MAX_RX_QUEUE_PER_LCORE 1024
 #define MAX_TX_QUEUE_PER_LCORE 1024
 #define BURST_TX_DRAIN_US 100
@@ -125,10 +125,7 @@ struct basic_port_statistic{
 	uint64_t size;
 }__rte_cache_aligned;
 struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
-struct usage_stat{
-	uint64_t n_pkt;
-	uint64_t size_of_this_p;
-}__rte_cache_aligned;
+
 struct max_mem{
 	uint32_t ipv4_addr;
 	uint8_t l3_pro;
@@ -136,16 +133,13 @@ struct max_mem{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 };
-struct compo_keyV4
-{
-	uint32_t ipv4_addr;
-	uint8_t l3_pro;
-	uint16_t port;
-}__rte_cache_aligned;
+
 
 static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 static struct max_mem max_stat[3];
 struct rte_hash *hash_tb[2];
+int numkey[] = {0,0};
+struct compo_keyV4 key_list[2000][2];
 //struct rte_hash *hash_tb_cli[2];
 unsigned n_port;
 int isAdded = 1;
@@ -174,11 +168,7 @@ parse_args(int argc,char **argv){
 		{
 		case 'V':
 			/* code */
-			isVerbose = parse_to_base10(optarg);
-			if(isVerbose <  0){
-				printf("invalid verbose option\n");
-				return -1;
-			}
+			isVerbose = 1;
 			break;
 		case 'T':
 			tmp_time = parse_to_base10(optarg);
@@ -513,7 +503,7 @@ print_stats(uint64_t tim)
 	total_packets_rx = 0;
 	const char clr[] = { 27, '[', '2', 'J', '\0' };
 	const char topLeft[] = { 27, '[', '1', ';', '1', 'H','\0' };
-	isAdded = !isAdded;
+	
 		/* Clear screen and move to top left */
 	printf("%s%s", clr, topLeft);
 
@@ -556,14 +546,12 @@ print_stats(uint64_t tim)
 		(max_stat[i].size_of_this_p*8)/1000000,
 		max_stat[i].n_pkt);
 	}
-	
 	printf("\n====================================================\n");
 	for (int i = 0; i < 3; i++)
 	{
 		max_stat[i].size_of_this_p = 0;
 		max_stat[i].n_pkt = 0;
 	}
-	rte_hash_reset(hash_tb[!isAdded]);
 }
 static void
 forward_data(struct rte_mbuf *data,unsigned portid,uint16_t queueid){
@@ -645,6 +633,11 @@ process_data(struct rte_mbuf *data,unsigned portid){
 					}
 					if(res == -2){
 						res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+						rte_atomic64_add(&ipv4_stat[res2][isAdded].size_of_this_p,data->pkt_len);
+						ipv4_stat[res2][isAdded].src_port = src_port;
+						rte_atomic64_add(&ipv4_stat[res2][isAdded].n_pkt,1);
+						key_list[numkey[isAdded]][isAdded] = tmp_key;
+						numkey[isAdded]++;
 					}
 				}
 				else{
@@ -729,9 +722,13 @@ main_loop(void)
 		if(unlikely(timer_tsc >= time_peroid)){
 			/* do this only on master core */
 			if (lcore_id == rte_get_master_lcore()) {
+				isAdded = !isAdded;
 				if(isVerbose){
 					print_stats(timer_tsc);
 				}
+				write_log(hash_tb[!isAdded],"server",numkey[!isAdded],ipv4_stat,!isAdded);
+				numkey[!isAdded]=0;
+				rte_hash_reset(hash_tb[!isAdded]);
 				/* reset the timer */
 				timer_tsc = 0;
 			}
