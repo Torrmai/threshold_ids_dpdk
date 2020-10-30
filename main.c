@@ -130,6 +130,7 @@ struct max_mem{
 	uint32_t ipv4_addr;
 	uint8_t l3_pro;
 	uint16_t port;
+	uint16_t src_port;
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 };
@@ -541,7 +542,7 @@ print_stats(uint64_t tim)
 		(uint8_t)((max_stat[i].ipv4_addr >> 8)&0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 16)&0xff),
 		(uint8_t)((max_stat[i].ipv4_addr >> 24)&0xff),
-		(max_stat[i].port),
+		(max_stat[i].src_port),
 		(max_stat[i].l3_pro),
 		(max_stat[i].size_of_this_p*8)/1000000,
 		max_stat[i].n_pkt);
@@ -617,6 +618,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
 				max_stat[0].ipv4_addr = addr;
 				max_stat[0].port = tmp_key.port;
+				max_stat[0].src_port = port1;
 				max_stat[0].l3_pro = tmp_key.l3_pro;
 				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
@@ -624,6 +626,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
 				max_stat[1].ipv4_addr = addr;
 				max_stat[1].port = tmp_key.port;
+				max_stat[1].src_port = port1;
 				max_stat[1].l3_pro = tmp_key.l3_pro;
 				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
@@ -631,6 +634,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
 				max_stat[2].ipv4_addr = addr;
 				max_stat[2].port = tmp_key.port;
+				max_stat[2].src_port = port1;
 				max_stat[2].l3_pro = tmp_key.l3_pro;
 				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
 				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
