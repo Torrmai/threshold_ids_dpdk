@@ -20,7 +20,7 @@
 #include <rte_eth_ctrl.h>
 #include "data_structure.h"
 
-#define RECORD_ENTIRES 2000
+
 #define MAX_RX_QUEUE_PER_LCORE 1024
 #define MAX_TX_QUEUE_PER_LCORE 1024
 #define BURST_TX_DRAIN_US 100
@@ -137,11 +137,14 @@ struct max_mem{
 
 
 static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
+static struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 static struct max_mem max_stat[3];
 struct rte_hash *hash_tb[2];
-int numkey[] = {0,0};
-struct compo_keyV4 key_list[2000][2];
-//struct rte_hash *hash_tb_cli[2];
+uint32_t numkey[] = {0,0};
+uint32_t numkey_cli[] = {0,0};
+struct compo_keyV4 key_list[RECORD_ENTIRES][2];
+struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
+struct rte_hash *hash_tb_cli[2];
 unsigned n_port;
 int isAdded = 1;
 // init section
@@ -548,6 +551,8 @@ print_stats(uint64_t tim)
 		max_stat[i].n_pkt);
 	}
 	printf("\n====================================================\n");
+	printf("Number of key %d\n",rte_hash_count(hash_tb_cli[!isAdded]));
+	printf("%d\n",numkey_cli[!isAdded]);
 	for (int i = 0; i < 3; i++)
 	{
 		max_stat[i].size_of_this_p = 0;
@@ -589,56 +594,80 @@ is_valid_ipv4_pkt(struct rte_ipv4_hdr *pkt,uint32_t len)
 }
 //process section
 static void
-add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3_pro)
+add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3_pro,uint32_t dst_addr,char *target)
 {
 	//add data to my defined array
 	struct compo_keyV4 tmp_key;
 	int res,res2;
-	tmp_key.port = port2;
+	tmp_key.dst_port = port2;
+	tmp_key.src_port = port1; 
 	tmp_key.l3_pro = l3_pro;
 	tmp_key.ipv4_addr = addr;
-	res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
-	if(res < 0){
-		if(res == -EINVAL){
-			printf("Error\n");
+	tmp_key.ipv4_addr_dst = dst_addr;
+	if(target == "server"){
+		res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
+		if(res < 0){
+			if(res == -EINVAL){
+				printf("Error\n");
+			}
+			if(res == -2){
+				res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
+				rte_atomic64_add(&ipv4_stat[res2][isAdded].size_of_this_p,size);
+				rte_atomic64_add(&ipv4_stat[res2][isAdded].n_pkt,1);
+				key_list[numkey[isAdded]][isAdded] = tmp_key;
+				numkey[isAdded]++;
+			}
 		}
-		if(res == -2){
-			res2 = rte_hash_add_key(hash_tb[isAdded],(void *)&tmp_key);
-			rte_atomic64_add(&ipv4_stat[res2][isAdded].size_of_this_p,size);
-			ipv4_stat[res2][isAdded].src_port = port1;
-			rte_atomic64_add(&ipv4_stat[res2][isAdded].n_pkt,1);
-			key_list[numkey[isAdded]][isAdded] = tmp_key;
-			numkey[isAdded]++;
-		}
+		else{
+			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
+			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+			if(isVerbose){
+				if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
+					max_stat[0].ipv4_addr = addr;
+					max_stat[0].port = tmp_key.src_port;
+					max_stat[0].src_port = port2;
+					max_stat[0].l3_pro = tmp_key.l3_pro;
+					max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
+				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
+					max_stat[1].ipv4_addr = addr;
+					max_stat[1].port = tmp_key.src_port;
+					max_stat[1].src_port = port2;
+					max_stat[1].l3_pro = tmp_key.l3_pro;
+					max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
+				else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
+					max_stat[2].ipv4_addr = addr;
+					max_stat[2].port = tmp_key.src_port;
+					max_stat[2].src_port = port2;
+					max_stat[2].l3_pro = tmp_key.l3_pro;
+					max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
+					max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+				}
+			}
+		}		
 	}
-	else{
-		rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
-		rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-		if(isVerbose){
-			if(ipv4_stat[res][isAdded].size_of_this_p > max_stat[0].size_of_this_p){
-				max_stat[0].ipv4_addr = addr;
-				max_stat[0].port = tmp_key.port;
-				max_stat[0].src_port = port1;
-				max_stat[0].l3_pro = tmp_key.l3_pro;
-				max_stat[0].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[0].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+	else if(target == "client"){
+		res = rte_hash_lookup(hash_tb_cli[isAdded],(void *)&tmp_key);
+		if(res < 0){
+			if(res == -EINVAL){
+				printf("Error\n");
 			}
-			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[0].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[1].size_of_this_p){
-				max_stat[1].ipv4_addr = addr;
-				max_stat[1].port = tmp_key.port;
-				max_stat[1].src_port = port1;
-				max_stat[1].l3_pro = tmp_key.l3_pro;
-				max_stat[1].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[1].n_pkt = ipv4_stat[res][isAdded].n_pkt;
+			if(res == -2){
+				res2 = rte_hash_add_key(hash_tb_cli[isAdded],(void *)&tmp_key);
+				if(res2 > 0){
+					rte_atomic64_add(&ipv4_cli[res2][isAdded].size_of_this_p,size);
+					rte_atomic64_add(&ipv4_cli[res2][isAdded].n_pkt,1);
+					key_list_cli[numkey_cli[isAdded]][isAdded] = tmp_key;
+					numkey_cli[isAdded]++;
+				}
 			}
-			else if(ipv4_stat[res][isAdded].size_of_this_p < max_stat[1].size_of_this_p && ipv4_stat[res][isAdded].size_of_this_p > max_stat[2].size_of_this_p){
-				max_stat[2].ipv4_addr = addr;
-				max_stat[2].port = tmp_key.port;
-				max_stat[2].src_port = port1;
-				max_stat[2].l3_pro = tmp_key.l3_pro;
-				max_stat[2].size_of_this_p = ipv4_stat[res][isAdded].size_of_this_p;
-				max_stat[2].n_pkt = ipv4_stat[res][isAdded].n_pkt;
-			}
+		}
+		else{
+			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
+			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
 		}
 	}
 }
@@ -680,11 +709,16 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				break;
 			}
 			//check for server in both sides
-			if(src_port < 1024){
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id);
+ 			if(src_port < 1024){
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server");
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client");
+			}
+			else if(src_port > 1024 && dst_port > 1024){
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client");
 			}
 			if(dst_port < 1024){
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id);
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client");
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server");
 			}
 		}
 		break;
@@ -746,9 +780,22 @@ main_loop(void)
 				if(isVerbose){
 					print_stats(timer_tsc);
 				}
-				write_log(hash_tb[!isAdded],"server",numkey[!isAdded],ipv4_stat,!isAdded);
+				write_log(hash_tb[!isAdded],"server",ipv4_stat,!isAdded);
+				write_log(hash_tb_cli[!isAdded],"client",ipv4_cli,!isAdded);
 				numkey[!isAdded]=0;
+				numkey_cli[!isAdded]=0;
+				//reset value in array ALSO TEMPORARY solution
+				
+				for (int i = 0; i < RECORD_ENTIRES; i++)
+				{
+					ipv4_stat[i][!isAdded].n_pkt = 0;
+					ipv4_stat[i][!isAdded].size_of_this_p = 0;
+					ipv4_cli[i][!isAdded].n_pkt = 0;
+					ipv4_cli[i][!isAdded].size_of_this_p = 0;
+				}
+				
 				rte_hash_reset(hash_tb[!isAdded]);
+				rte_hash_reset(hash_tb_cli[!isAdded]);
 				/* reset the timer */
 				timer_tsc = 0;
 			}
@@ -834,6 +881,7 @@ main(int argc, char **argv){
 				rte_strerror(-ret), portid);
 		printf("Done\n");
 	}
+	//init hash table for server roles
 	struct rte_hash_parameters params1 = {
 		.name = "ipv4_hash0",
 		.entries = RECORD_ENTIRES,
@@ -863,6 +911,36 @@ main(int argc, char **argv){
 		fprintf(stderr,"create hash1 failed\n");
 		return 1;
 	}
+	//end of initialization of server roles
+	//client roles
+	struct rte_hash_parameters cli_param1 =
+	{
+		.entries = RECORD_ENTIRES,
+		.key_len = sizeof (struct compo_keyV4),
+		.socket_id = 0,
+		.hash_func = rte_jhash,
+		.hash_func_init_val = 0,
+		.name = "client hash1",
+	};
+	hash_tb_cli[0] = rte_hash_create(&cli_param1);
+	if(!hash_tb_cli[0]){
+		fprintf(stderr,"can't init client storage\n");
+		return 1;
+	}
+	struct rte_hash_parameters cli_param2 =
+	{
+		.entries = RECORD_ENTIRES,
+		.key_len = sizeof (struct compo_keyV4),
+		.socket_id = 0,
+		.hash_func = rte_jhash,
+		.hash_func_init_val = 0,
+		.name = "client hash2",
+	};
+	hash_tb_cli[1] = rte_hash_create(&cli_param2);
+	if(!hash_tb_cli[1]){
+		fprintf(stderr,"can't init client storage\n");
+		return 1;
+	}
 	check_all_ports_link_status();
 	ret = 0;
 	/* launch per-lcore init on every lcore */
@@ -883,6 +961,7 @@ main(int argc, char **argv){
 	{
 		/* code */
 		rte_hash_free(hash_tb[i]);
+		rte_hash_free(hash_tb_cli[i]);
 	}
 	printf("Bye...\n");
 }
