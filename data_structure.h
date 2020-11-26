@@ -17,6 +17,15 @@ struct compo_keyV4
 	uint16_t src_port;
 	uint16_t dst_port;
 }__rte_cache_aligned;
+struct compo_keyV6
+{
+	uint8_t ipv6_addr[16];
+	uint8_t ipv6_addr_dst[16];
+	uint8_t l3_pro;
+	uint16_t src_port;
+	uint16_t dst_port;
+}__rte_cache_aligned;
+
 struct usage_stat{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;

@@ -722,6 +722,8 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			}
 		}
 		break;
+	case RTE_ETHER_TYPE_IPV6:
+		break;
 	default:
 		break;
 	}
