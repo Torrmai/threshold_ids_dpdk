@@ -23,7 +23,7 @@ void write_log(struct rte_hash *tb,char *target,struct usage_stat data[][2],int 
         sprintf(path,"/home/chanawat/data/%s/%"PRIu64".csv",target,(uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000);
         //printf("called %d\n",numelem);
         fp = fopen(path,"w+");
-        fprintf(fp,"ip addr,src port,ip addr dst,dst port,l3 proto,usage,#packets\n");
+        fprintf(fp,"ip addr,src port,ip addr dst,dst port,Type of service,usage,#packets\n");
         if(target == "server"){
             for (int i = 0; i < numelem; i++)
             {

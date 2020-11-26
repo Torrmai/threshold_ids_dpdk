@@ -33,5 +33,7 @@ struct usage_stat{
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
+extern struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+extern struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 
 void write_log(struct rte_hash *tb,char *target,struct usage_stat data[][2],int curr_tb);

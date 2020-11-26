@@ -138,13 +138,19 @@ struct max_mem{
 
 static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 static struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
-static struct max_mem max_stat[3];
-struct rte_hash *hash_tb[2];
-uint32_t numkey[] = {0,0};
-uint32_t numkey_cli[] = {0,0};
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
+struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+static struct max_mem max_stat[3];
+
+struct rte_hash *hash_tb[2];
 struct rte_hash *hash_tb_cli[2];
+struct rte_hash *hash_tb_v6[2];
+//struct rte_hash *hash_tb_v6_cli[2];
+
+uint32_t numkey[] = {0,0};
+uint32_t numkey_cli[] = {0,0};
+uint32_t numkeyV6[] = {0,0};
 unsigned n_port;
 int isAdded = 1;
 // init section
@@ -604,7 +610,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 	tmp_key.l3_pro = l3_pro;
 	tmp_key.ipv4_addr = addr;
 	tmp_key.ipv4_addr_dst = dst_addr;
-	if(target == "server"){
+	if(target == "server_v4"){
 		res = rte_hash_lookup(hash_tb[isAdded],(void *)&tmp_key);
 		if(res < 0){
 			if(res == -EINVAL){
@@ -649,7 +655,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 			}
 		}		
 	}
-	else if(target == "client"){
+	else if(target == "client_v4"){
 		res = rte_hash_lookup(hash_tb_cli[isAdded],(void *)&tmp_key);
 		if(res < 0){
 			if(res == -EINVAL){
@@ -680,6 +686,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	l2_hdr = rte_pktmbuf_mtod(data, struct rte_ether_hdr *);
 	eth_type = rte_be_to_cpu_16(l2_hdr->ether_type);
 	struct rte_ipv4_hdr *ipv4_hdr;
+	struct rte_ipv6_hdr *ipv6_hdr;
 	struct rte_udp_hdr *udp_data;
 	struct rte_tcp_hdr  *tcp_data;
 	uint16_t src_port = 0;
@@ -710,15 +717,15 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			}
 			//check for server in both sides
  			if(src_port < 1024){
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client");
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
 			}
 			else if(src_port > 1024 && dst_port > 1024){
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client");
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
 			}
 			if(dst_port < 1024){
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server");
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
 			}
 		}
 		break;
