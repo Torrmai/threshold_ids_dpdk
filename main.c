@@ -136,8 +136,9 @@ struct max_mem{
 };
 
 
-static struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
-static struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
+struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
+struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
+struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
 struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
@@ -676,6 +677,27 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
 		}
 	}
+	else if(target == "server"){
+		res = rte_hash_lookup(hash_tb_cli[isAdded],(void *)&tmp_key);
+		if(res < 0){
+			if(res == -EINVAL){
+				printf("Error\n");
+			}
+			if(res == -2){
+				res2 = rte_hash_add_key(hash_tb_cli[isAdded],(void *)&tmp_key);
+				if(res2 > 0){
+					rte_atomic64_add(&ipv4_cli[res2][isAdded].size_of_this_p,size);
+					rte_atomic64_add(&ipv4_cli[res2][isAdded].n_pkt,1);
+					key_list_cli[numkey_cli[isAdded]][isAdded] = tmp_key;
+					numkey_cli[isAdded]++;
+				}
+			}
+		}
+		else{
+			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
+			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
+		}
+	}
 }
 static void
 process_data(struct rte_mbuf *data,unsigned portid){
@@ -730,6 +752,28 @@ process_data(struct rte_mbuf *data,unsigned portid){
 		}
 		break;
 	case RTE_ETHER_TYPE_IPV6:
+		ipv6_hdr = (struct rte_ipv6_hdr *)((char *)l2_hdr +sizeof(struct rte_ipv6_hdr));
+		switch (ipv6_hdr ->proto)
+		{
+			case 0x11:
+				udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+				dst_port = udp_data->dst_port;
+				src_port = udp_data->src_port;
+				break;
+			case 0x06:
+				tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
+				dst_port = tcp_data->dst_port;
+				src_port = tcp_data->src_port;
+				break;
+			default:
+				src_port = 0;
+				dst_port = 0;
+				break;
+		}
+		//check for server in both sides
+ 		if(src_port < 1024){
+			add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v6");
+		}
 		break;
 	default:
 		break;
@@ -789,20 +833,11 @@ main_loop(void)
 				if(isVerbose){
 					print_stats(timer_tsc);
 				}
-				write_log(hash_tb[!isAdded],"server",ipv4_stat,!isAdded);
-				write_log(hash_tb_cli[!isAdded],"client",ipv4_cli,!isAdded);
+				write_log(hash_tb[!isAdded],"server",!isAdded);
+				write_log(hash_tb_cli[!isAdded],"client",!isAdded);
 				numkey[!isAdded]=0;
 				numkey_cli[!isAdded]=0;
-				//reset value in array ALSO TEMPORARY solution
-				
-				for (int i = 0; i < RECORD_ENTIRES; i++)
-				{
-					ipv4_stat[i][!isAdded].n_pkt = 0;
-					ipv4_stat[i][!isAdded].size_of_this_p = 0;
-					ipv4_cli[i][!isAdded].n_pkt = 0;
-					ipv4_cli[i][!isAdded].size_of_this_p = 0;
-				}
-				
+
 				rte_hash_reset(hash_tb[!isAdded]);
 				rte_hash_reset(hash_tb_cli[!isAdded]);
 				/* reset the timer */
