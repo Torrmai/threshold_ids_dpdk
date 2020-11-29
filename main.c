@@ -751,7 +751,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			}
 		}
 		break;
-	case RTE_ETHER_TYPE_IPV6:
+	/*case RTE_ETHER_TYPE_IPV6:
 		ipv6_hdr = (struct rte_ipv6_hdr *)((char *)l2_hdr +sizeof(struct rte_ipv6_hdr));
 		switch (ipv6_hdr ->proto)
 		{
@@ -774,7 +774,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
  		if(src_port < 1024){
 			add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v6");
 		}
-		break;
+		break;*/
 	default:
 		break;
 	}
