@@ -4,8 +4,18 @@
 #include <sys/time.h>
 #include "data_structure.h"
 int write_time = 0;
-void print_IPv6(FILE *f,uint8_t addr[]){
-    
+void print_IPv6(uint8_t addr[],char *real_addr){
+	char tmp_addr[4];
+	for (int i = 0; i < 16; i++)
+	{
+		uint16_t tmp = addr[i];
+		sprintf(tmp_addr,"%02x",tmp);
+		strcat(real_addr,tmp_addr);
+		if(i%2 == 1 && i < 15){
+			strcat(real_addr,":");
+		}
+	}
+    //printf("%s\n",ipv6_addr);  
 }
 void print_ip(FILE *f,uint32_t addr){
     fprintf(f,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
@@ -14,7 +24,9 @@ void print_ip(FILE *f,uint32_t addr){
         (uint8_t)((addr >> 16) & 0xff),
         (uint8_t)((addr >> 24) & 0xff));
 }
-void write_log(struct rte_hash *tb,char *target,int curr_tb)
+
+//public function
+void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
 {
     FILE *fp;
     char path[255];
@@ -23,7 +35,7 @@ void write_log(struct rte_hash *tb,char *target,int curr_tb)
     if(write_time > 1){
         int numelem = rte_hash_count(tb);
         gettimeofday(&tv,NULL);
-        sprintf(path,"/home/chanawat/data/%s/%"PRIu64".csv",target,(uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000);
+        sprintf(path,"/home/chanawat/data/%s/IPv4/%"PRIu64".csv",target,(uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000);
         //printf("called %d\n",numelem);
         fp = fopen(path,"w+");
         fprintf(fp,"ip addr,src port,ip addr dst,dst port,Type of service,usage,#packets\n");

@@ -139,4 +139,5 @@ dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/generic/rte_atomic.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_udp.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_tcp.h \
- /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_hash.h
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_hash.h \
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_jhash.h

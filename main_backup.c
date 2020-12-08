@@ -451,3 +451,23 @@ main(int argc, char *argv[])
 	lcore_main();
 	return 0;
 }
+//back up function
+static void
+forward_data(struct rte_mbuf *data,unsigned portid,uint16_t queueid){
+	int sent;
+	struct rte_eth_dev_tx_buffer *buffer;
+	struct rte_ether_hdr *l2_hdr;
+	void *tmp;
+
+	l2_hdr = rte_pktmbuf_mtod(data, struct rte_ether_hdr *);
+
+	/* 02:00:00:00:00:xx */
+	tmp = &l2_hdr->d_addr.addr_bytes[0];
+	*((uint64_t *)tmp) = 0x000000000002 + ((uint64_t)portid << 40);
+
+	/* src addr */
+	rte_ether_addr_copy(&ports_eth_addr[portid], &l2_hdr->s_addr);
+	buffer = tx_buffer[portid][queueid];
+	sent = rte_eth_tx_buffer(portid,queueid,buffer,data);
+	
+}
