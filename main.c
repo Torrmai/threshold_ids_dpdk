@@ -129,7 +129,7 @@ struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
-static struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
 
 
 const struct rte_hash *hash_tb[2];
@@ -540,8 +540,8 @@ print_stats(uint64_t tim)
 		   (total_size*8)/1000000);
 	
 	printf("\n====================================================\n");
-	printf("Number of key %d\n",rte_hash_count(hash_tb_cli[!isAdded]));
-	printf("Number of key(by incrementing) %d\n",numkey_cli[!isAdded]);
+	printf("Number of key_v6 %d\n",rte_hash_count(hash_tb_v6[!isAdded]));
+	printf("Number of key_v6(by incrementing) %d\n",numkeyV6[!isAdded]);
 }
 
 //rfc 1812 check all code copy from l3fwd.h
@@ -695,7 +695,19 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			tmp_s.dst_port = dst_port;
 			//printf("%"PRIu8"\n",tmp_s.ipv6_addr[0]);
 			res = rte_hash_add_key(hash_tb_v6[isAdded],(void *)&tmp_s);
-			//add_to_hashV6(ipv6_hdr->src_addr,ipv6_hdr->dst_addr,data->pkt_len,ipv6_hdr->proto,src_port,dst_port,"server"); 
+			if(res <0)
+			{
+				if(res == -EINVAL){
+					printf("Invalid param?\n");
+				}
+				if(res == -ENOSPC){
+					printf("No space?\n");
+				}
+			}
+			key_list6[numkeyV6[isAdded]][isAdded] = tmp_s;
+			numkeyV6[isAdded]++;
+			rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
+			rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len); 
 		}
 		break;
 	default:
@@ -758,8 +770,10 @@ main_loop(void)
 				}
 				write_log_v4(hash_tb[!isAdded],"server",!isAdded);
 				write_log_v4(hash_tb_cli[!isAdded],"client",!isAdded);
+				write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);
 				numkey[!isAdded]=0;
 				numkey_cli[!isAdded]=0;
+				numkeyV6[!isAdded] = 0;
 
 				rte_hash_reset(hash_tb[!isAdded]);
 				rte_hash_reset(hash_tb_cli[!isAdded]);

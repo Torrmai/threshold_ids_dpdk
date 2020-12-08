@@ -37,12 +37,12 @@ struct usage_stat{
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
-/*extern struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
-extern struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];*/
+extern struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+extern struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 
 extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb);
-void print_IPv6(uint8_t addr[],char *real_addr);
+void write_log_v6(struct rte_hash *tb,char *target,int curr_tb);
