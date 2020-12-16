@@ -21,6 +21,16 @@ void print_IPv6(uint8_t addr[],FILE *f){
         memset(ipv6_addr,0,sizeof(ipv6_addr)); 
     }
 }
+const char* show_IPv4(uint32_t addr){
+    char tmp_addr[50];
+    memset(tmp_addr,0,sizeof(tmp_addr));
+    sprintf(tmp_addr,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
+        (uint8_t)(addr & 0xff),
+        (uint8_t)((addr >> 8) & 0xff),
+        (uint8_t)((addr >> 16) & 0xff),
+        (uint8_t)((addr >> 24) & 0xff));
+    return tmp_addr;   
+}
 void print_ip(FILE *f,uint32_t addr){
     fprintf(f,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
         (uint8_t)(addr & 0xff),

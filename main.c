@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <getopt.h>
 #include <stdbool.h>
+#include <syslog.h>
 
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -106,7 +107,6 @@ static const struct option lgopts[] = {
 	{NULL, 0, 0, 0}
 };
 static int isVerbose = 0;
-static int sortBY = 0;
 //statistical related data type
 struct basic_port_statistic{
 	uint64_t rx_packet;
@@ -140,6 +140,7 @@ const struct rte_hash *hash_tb_v6[2];
 uint32_t numkey[] = {0,0};
 uint32_t numkey_cli[] = {0,0};
 uint32_t numkeyV6[] = {0,0};
+static uint64_t global_limit = REC_GLOBAL_LIM;
 unsigned n_port;
 int isAdded = 1;
 // init section
@@ -159,7 +160,7 @@ parse_args(int argc,char **argv){
 	int opt_index;
 	char *prgname = argv[0];
 	int tmp_time = 0;
-	int tmp_sort = 0;
+	uint32_t tmp_global_limit = 0;
 	argvopt = argv;
 	while ((opt = getopt_long(argc,argvopt,short_options,lgopts,&opt_index)) != EOF)
 	{
@@ -178,12 +179,15 @@ parse_args(int argc,char **argv){
 			time_peroid = tmp_time;
 			//return 0;
 			break;
-		case 's':
-			tmp_sort = parse_to_base10(optarg);
-			if(tmp_sort < 0){
-				printf("invalid sort option\n");
+		case 'F':
+			tmp_global_limit = parse_to_base10(optarg);
+			printf("%"PRIu32"\n",tmp_global_limit);
+			if(tmp_global_limit == 0){
+				printf("Invalid global limt option\n");
 				return -1;
 			}
+			global_limit = tmp_global_limit;
+			break;
 		case 0:
 			break;
 		default:
@@ -542,6 +546,7 @@ print_stats(uint64_t tim)
 	printf("\n====================================================\n");
 	printf("Number of key_v6 %d\n",rte_hash_count(hash_tb_v6[!isAdded]));
 	printf("Number of key_v6(by incrementing) %d\n",numkeyV6[!isAdded]);
+	printf("Limit: %"PRIu32"\n",global_limit);
 }
 
 //rfc 1812 check all code copy from l3fwd.h
@@ -564,6 +569,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 {
 	//add data to my defined array
 	struct compo_keyV4 tmp_key;
+	char buff[255];
 	int res,res2;
 	tmp_key.dst_port = port2;
 	tmp_key.src_port = port1; 
@@ -587,6 +593,11 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+			if(ipv4_stat[res][isAdded].size_of_this_p > global_limit){
+				sprintf(buff,"%s: %"PRIu16" -> %s: %"PRIu16" usage exceeding limit!!! ( %"PRIu64" bytes)",
+					show_IPv4(addr),port1,show_IPv4(dst_addr),port2,ipv4_stat[res][isAdded].size_of_this_p);
+				syslog(LOG_ALERT,buff);
+			}
 		}		
 	}
 	else if(target == "client_v4"){
@@ -687,27 +698,29 @@ process_data(struct rte_mbuf *data,unsigned portid){
  		if(src_port < 1024){
 			for (size_t i = 0; i < 16; i++)
 			{
-			tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
-			tmp_s.ipv6_addr_dst[i] = ipv6_hdr->dst_addr[i];
+				tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
+				tmp_s.ipv6_addr_dst[i] = ipv6_hdr->dst_addr[i];
 			}
 			tmp_s.l3_pro = ipv6_hdr->proto;
 			tmp_s.src_port = src_port;
 			tmp_s.dst_port = dst_port;
 			//printf("%"PRIu8"\n",tmp_s.ipv6_addr[0]);
-			res = rte_hash_add_key(hash_tb_v6[isAdded],(void *)&tmp_s);
-			if(res <0)
-			{
-				if(res == -EINVAL){
-					printf("Invalid param?\n");
+			if((void *)&tmp_s != NULL){
+				res = rte_hash_add_key(hash_tb_v6[isAdded],(void *)&tmp_s);
+				if(res <0)
+				{
+					if(res == -EINVAL){
+						printf("Invalid param?\n");
+					}
+					if(res == -ENOSPC){
+						printf("No space?\n");
+					}
 				}
-				if(res == -ENOSPC){
-					printf("No space?\n");
-				}
-			}
-			key_list6[numkeyV6[isAdded]][isAdded] = tmp_s;
-			numkeyV6[isAdded]++;
-			rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
-			rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len); 
+				key_list6[numkeyV6[isAdded]][isAdded] = tmp_s;
+				numkeyV6[isAdded]++;
+				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
+				rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len);
+			} 
 		}
 		break;
 	default:
@@ -955,6 +968,9 @@ main(int argc, char **argv){
 	}
 	//end of initialization of server roles
 	check_all_ports_link_status();
+	printf("Please enter usage limit: ");
+	scanf("%"PRIu64,&global_limit);
+	openlog("TEST IDS LOG JA",LOG_PID,LOG_USER);
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
@@ -977,5 +993,6 @@ main(int argc, char **argv){
 		rte_hash_free(hash_tb_cli[i]);
 		rte_hash_free(hash_tb_v6[i]);
 	}
+	closelog();
 	printf("Bye...\n");
 }

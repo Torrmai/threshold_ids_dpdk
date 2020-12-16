@@ -18,6 +18,9 @@ dep_main.o = /home/chanawat/threshold_ips_dpdk/main.c \
  /usr/include/stdint.h /usr/include/bits/wchar.h /usr/include/inttypes.h \
  /usr/include/getopt.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdbool.h \
+ /usr/include/syslog.h /usr/include/sys/syslog.h \
+ /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdarg.h \
+ /usr/include/bits/syslog-path.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eal.h \
  /usr/include/sched.h /usr/include/bits/sched.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_config.h \
@@ -28,10 +31,9 @@ dep_main.o = /home/chanawat/threshold_ips_dpdk/main.c \
  /usr/include/bits/setjmp.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_bus.h \
  /usr/include/stdio.h /usr/include/libio.h /usr/include/_G_config.h \
- /usr/include/wchar.h \
- /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdarg.h \
- /usr/include/bits/stdio_lim.h /usr/include/bits/sys_errlist.h \
- /usr/include/bits/stdio.h /usr/include/sys/queue.h \
+ /usr/include/wchar.h /usr/include/bits/stdio_lim.h \
+ /usr/include/bits/sys_errlist.h /usr/include/bits/stdio.h \
+ /usr/include/sys/queue.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_log.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_common.h \
  /usr/include/stdlib.h /usr/include/bits/waitflags.h \

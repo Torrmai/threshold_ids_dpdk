@@ -12,6 +12,7 @@
 	Declare most use variable in this file
 */
 #define RECORD_ENTIRES 100000
+#define REC_GLOBAL_LIM 3000000
 //data structure secsion
 struct compo_keyV4
 {
@@ -46,3 +47,4 @@ extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb);
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb);
+const char* show_IPv4(uint32_t addr);
