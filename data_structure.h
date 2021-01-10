@@ -34,6 +34,7 @@ struct compo_keyV6
 struct usage_stat{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
+	uint8_t is_alert;
 }__rte_cache_aligned;
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];

@@ -44,11 +44,11 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
     FILE *fp;
     char src_adr[16];
     char dst_addr[16];
-    char path[255];
+    char path[1000];
     struct timeval tv;
     int res;
-    if(write_time > 1){
-        int numelem = rte_hash_count(tb);
+    int numelem = rte_hash_count(tb);
+    if(write_time > 1 && numelem > 0){
         //print_IPv6(key_list6[0][curr_tb].ipv6_addr);
         //print_IPv6(key_list6[0][curr_tb].ipv6_addr_dst);
         /*for (int i = 0; i < numelem; i++)
@@ -119,11 +119,11 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
 {
     FILE *fp;
-    char path[255];
+    char path[1000];
     struct timeval tv;
     int res;
-    if(write_time > 1){
-        int numelem = rte_hash_count(tb);
+    int numelem = rte_hash_count(tb);
+    if(write_time > 1 && numelem > 0){
         gettimeofday(&tv,NULL);
         sprintf(path,"/home/chanawat/data/%s/IPv4/%"PRIu64".csv",target,(uint64_t)(tv.tv_sec)*1000 + (uint64_t)(tv.tv_usec)/1000);
         //printf("called %d\n",numelem);
@@ -149,6 +149,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                     //reset value
                     ipv4_stat[res][curr_tb].size_of_this_p = 0;
                     ipv4_stat[res][curr_tb].n_pkt = 0;
+                    ipv4_stat[res][curr_tb].is_alert = 0;
                 }
                 
             }
@@ -171,15 +172,16 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                     print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr_dst);
                     fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
                     fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                    //reset value
+                    rte_atomic64_set(&ipv4_cli[res][curr_tb].size_of_this_p,0);
+                    rte_atomic64_set(&ipv4_cli[res][curr_tb].n_pkt,0);
                 }
-                //reset value
-                ipv4_cli[res][curr_tb].size_of_this_p = 0;
-                ipv4_cli[res][curr_tb].n_pkt = 0;
+
             }
             fclose(fp);
         }
     }else{
         write_time++;
     }
-
+    memset(path,0,sizeof(path));
 }
