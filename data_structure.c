@@ -80,10 +80,10 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
                         print_IPv6(key_list6[i][curr_tb].ipv6_addr_dst,fp);
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list6[i][curr_tb].dst_port,key_list6[i][curr_tb].l3_pro);
                         fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv6_stat[res][curr_tb].size_of_this_p * 8,ipv6_stat[res][curr_tb].n_pkt);
-                        //reset value
-                        ipv6_stat[res][curr_tb].size_of_this_p = 0;
-                        ipv6_stat[res][curr_tb].n_pkt = 0;
                     }
+                    //reset value
+                    ipv6_stat[res][curr_tb].n_pkt = 0;
+                    ipv6_stat[res][curr_tb].size_of_this_p = 0;
                 }
             }
             fclose(fp);

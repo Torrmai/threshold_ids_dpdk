@@ -116,8 +116,12 @@ struct basic_port_statistic port_stat[RTE_MAX_ETHPORTS];
 struct brief_data_info_elem
 {
 	uint64_t n_ipv4_pack;
+	uint64_t server_pack_v4;
+	uint64_t client_pack_v4;
 	uint64_t ipv4_usage;
 	uint64_t n_ipv6_pack;
+	uint64_t server_pack_v6;
+	uint64_t client_pack_v6;
 	uint64_t ipv6_usage;
 }__rte_cache_aligned;
 struct brief_data_info_elem data_info[2];
@@ -550,9 +554,16 @@ print_stats(uint64_t tim)
 		   "\nTotal size(Mbits): %15"PRIu64,
 		   total_packets_rx,
 		   (total_size*8)/1000000);
-	printf("\nThere are  %"PRIu64" IPv4 packets"
+	printf("\n\nThere are  %"PRIu64" IPv4 packets"
+			"\nwhich has total usage of %"PRIu64" Mbits"
+			"\n\t--> server %"PRIu64" packets"
+			"\n\t--> client %"PRIu64" packets"
+			"\n\nThere are %"PRIu64" IPv6 packets"
+			"\n\t--> server %"PRIu64" packets"
+			"\n\t--> client %"PRIu64" packets"
 			"\nwhich has total usage of %"PRIu64" Mbits",
-			data_info[!isAdded].n_ipv4_pack,(data_info[!isAdded].ipv4_usage*8)/1000000);
+			data_info[!isAdded].n_ipv4_pack,(data_info[!isAdded].ipv4_usage*8)/1000000,data_info[!isAdded].server_pack_v4,data_info[!isAdded].client_pack_v4
+			,data_info[!isAdded].n_ipv6_pack,data_info[!isAdded].server_pack_v6,data_info[!isAdded].client_pack_v6,(data_info[!isAdded].ipv6_usage*8)/1000000);
 	
 	printf("\n====================================================\n");
 }
@@ -647,6 +658,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	struct rte_tcp_hdr  *tcp_data;
 	uint16_t src_port = 0;
 	uint16_t dst_port = 0;
+	int indexV6;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
@@ -673,25 +685,40 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				dst_port = 0;
 				break;
 			}
-			//check for server in both sides
+			//basic classification 
  			if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
+				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
 				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
 				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
 			}
 			else if(src_port > 1024 && dst_port > 1024){
+				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
 				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
 				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
 			}
+			else if(src_port > 1024 && dst_port < 1024)
+			{
+				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
+				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
+			}
 			else
 			{
+				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
 				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
 				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
 			}
 			
 		}
 		break;
-	/*case RTE_ETHER_TYPE_IPV6:
-		ipv6_hdr = (struct rte_ipv6_hdr *)((char *)l2_hdr +sizeof(struct rte_ether_hdr));
+	case RTE_ETHER_TYPE_IPV6:
+		ipv6_hdr = (struct rte_ipv6_hdr *)((char *)l2_hdr +(int)sizeof(struct rte_ether_hdr));
+		if(isVerbose){
+			rte_atomic64_add(&data_info[isAdded].n_ipv6_pack,1);
+			rte_atomic64_add(&data_info[isAdded].ipv6_usage,data->pkt_len);			
+		}
 		switch (ipv6_hdr ->proto)
 		{
 			case 0x11:
@@ -711,6 +738,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 		}
 		//check for server in both sides
  		if(src_port < 1024){
+			rte_atomic64_add(&data_info[isAdded].server_pack_v6,1);
 			for (size_t i = 0; i < 16; i++)
 			{
 				tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
@@ -731,13 +759,18 @@ process_data(struct rte_mbuf *data,unsigned portid){
 						printf("No space?\n");
 					}
 				}
-				key_list6[numkeyV6[isAdded]][isAdded] = tmp_s;
-				numkeyV6[isAdded]++;
+				indexV6 = rte_hash_count(hash_tb_v6[isAdded]) - 1;
+				key_list6[indexV6][isAdded] = tmp_s;
+				numkeyV6[isAdded] = indexV6;
 				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
 				rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len);
 			} 
 		}
-		break;*/
+		else if(src_port >1024 || dst_port > 1024)
+		{
+			rte_atomic64_add(&data_info[isAdded].server_pack_v6,1);
+		}
+		break;
 	default:
 		break;
 	}
@@ -798,18 +831,25 @@ main_loop(void)
 				}
 				write_log_v4(hash_tb[!isAdded],"server",!isAdded);
 				write_log_v4(hash_tb_cli[!isAdded],"client",!isAdded);
-				//write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);
+				write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);
 				numkey[!isAdded]=0;
 				numkey_cli[!isAdded]=0;
+				numkeyV6[!isAdded]=0;
 				if(isVerbose){
 					data_info[!isAdded].ipv4_usage = 0;
+					data_info[!isAdded].server_pack_v4=0;
+					data_info[!isAdded].client_pack_v4=0;
 					data_info[!isAdded].n_ipv4_pack = 0;
+					data_info[!isAdded].n_ipv6_pack = 0;
+					data_info[!isAdded].server_pack_v6=0;
+					data_info[!isAdded].client_pack_v6=0;
+					data_info[!isAdded].ipv6_usage = 0;
 				}
 				//numkeyV6[!isAdded] = 0;
 
 				rte_hash_reset(hash_tb[!isAdded]);
 				rte_hash_reset(hash_tb_cli[!isAdded]);
-				//rte_hash_reset(hash_tb_v6[!isAdded]);
+				rte_hash_reset(hash_tb_v6[!isAdded]);
 				/* reset the timer */
 				timer_tsc = 0;
 			}
