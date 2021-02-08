@@ -142,7 +142,7 @@ struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
 struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
-
+struct diy_hash host_stat[RECORD_ENTIRES][2];
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
 const struct rte_hash *hash_tb_v6[2];
@@ -151,65 +151,12 @@ const struct rte_hash *hash_tb_v6[2];
 uint32_t numkey[] = {0,0};
 uint32_t numkey_cli[] = {0,0};
 uint32_t numkeyV6[] = {0,0};
-static uint64_t global_limit = REC_GLOBAL_LIM;
 unsigned n_port;
+int elem_lim;
+uint32_t lim_addr[RECORD_ENTIRES];
 int isAdded = 1;
 // init section
-static int
-parse_to_base10(const char *v_arg){
-	char *end = NULL;
-	unsigned long n;
-	n = strtol(v_arg,&end,10);
-	if ((v_arg[0] == '\0') || (end == NULL) || (*end != '\0'))
-		return -1;
-	return n;
-}
-static int
-parse_args(int argc,char **argv){
-	int opt,ret,timer_sec;
-	char **argvopt;
-	int opt_index;
-	char *prgname = argv[0];
-	int tmp_time = 0;
-	uint32_t tmp_global_limit = 0;
-	argvopt = argv;
-	while ((opt = getopt_long(argc,argvopt,short_options,lgopts,&opt_index)) != EOF)
-	{
-		switch (opt)
-		{
-		case 'V':
-			/* code */
-			isVerbose = 1;
-			break;
-		case 'T':
-			tmp_time = parse_to_base10(optarg);
-			if(tmp_time < 0){
-				printf("invalid timer option\n");
-				return -1;
-			}
-			time_peroid = tmp_time;
-			//return 0;
-			break;
-		case 'F':
-			tmp_global_limit = parse_to_base10(optarg);
-			printf("%"PRIu32"\n",tmp_global_limit);
-			if(tmp_global_limit == 0){
-				printf("Invalid global limt option\n");
-				return -1;
-			}
-			global_limit = tmp_global_limit;
-			break;
-		case 0:
-			break;
-		default:
-			return 0;
-			printf("Using default app setting......\n");
-			break;
-		}
 
-	}
-	
-}
 int sym_hash_enable(int port_id, uint32_t ftype, enum rte_eth_hash_function function)
 {
     struct rte_eth_hash_filter_info info;
@@ -658,9 +605,11 @@ process_data(struct rte_mbuf *data,unsigned portid){
 		ipv4_hdr = (struct rte_ipv4_hdr *)((char *)l2_hdr +(int)(sizeof(struct rte_ether_hdr)));
 		src = ipv4_hdr->src_addr;
 		dst = ipv4_hdr->dst_addr;
-		if(is_valid_ipv4_pkt(ipv4_hdr,data->data_len) == 0 && isVerbose){
-			rte_atomic64_add(&data_info[isAdded].n_ipv4_pack,1);
-			rte_atomic64_add(&data_info[isAdded].ipv4_usage,data->pkt_len);
+		if(is_valid_ipv4_pkt(ipv4_hdr,data->data_len) == 0){
+			if(isVerbose){
+				rte_atomic64_add(&data_info[isAdded].n_ipv4_pack,1);
+				rte_atomic64_add(&data_info[isAdded].ipv4_usage,data->pkt_len);
+			}
 			switch (ipv4_hdr->next_proto_id)
 			{
 			case 0x11:
@@ -678,7 +627,13 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				dst_port = 0;
 				break;
 			}
-			//basic classification 
+			//basic classification
+			res = src%RECORD_ENTIRES;
+			if(host_lim[res].is_alert == 0 && (host_lim[res].realaddr == src || host_lim[res].realaddr == dst)){
+				printf("%"PRIu32"\n",src);
+				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
+				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);
+			}
  			if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
 				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
 				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
@@ -822,6 +777,30 @@ main_loop(void)
 				if(isVerbose){
 					print_stats(timer_tsc);
 				}
+				//printf("%d\n",elem_lim);
+				for (int i = 0; i < elem_lim; i++)
+				{
+					lim_addr[i];
+					int res = lim_addr[i]%RECORD_ENTIRES;
+					//printf("%d\n",res);
+					if(host_lim[res].is_alert == 0)
+					{
+						if (host_lim[res].size_of_this_p <= host_stat[res][!isAdded].size_of_this_p)
+						{
+							printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
+							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p);
+							printf("%d\n",host_lim[res].is_alert);
+						}
+						else{
+							printf("%"PRIu32"\n",lim_addr[i]);
+							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p);
+						}
+						host_stat[res][!isAdded].size_of_this_p=0;
+						host_stat[res][!isAdded].n_pkt=0;
+					}
+					
+				}
+				
 				write_log_v4(hash_tb[!isAdded],"server",!isAdded);
 				write_log_v4(hash_tb_cli[!isAdded],"client",!isAdded);
 				write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);

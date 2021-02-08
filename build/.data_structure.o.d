@@ -19,13 +19,10 @@ dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /usr/include/bits/select.h /usr/include/bits/sigset.h \
  /usr/include/bits/time.h /usr/include/sys/sysmacros.h \
  /usr/include/bits/pthreadtypes.h /usr/include/alloca.h \
- /usr/include/bits/stdlib-float.h /usr/include/sys/queue.h \
- /usr/include/sys/time.h /usr/include/yaml.h /usr/include/string.h \
- /usr/include/bits/string.h /usr/include/bits/string2.h \
- /home/chanawat/threshold_ips_dpdk/data_structure.h \
+ /usr/include/bits/stdlib-float.h \
+ /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ip.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdint.h \
  /usr/include/stdint.h /usr/include/bits/wchar.h \
- /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ip.h \
  /usr/include/netinet/in.h /usr/include/sys/socket.h \
  /usr/include/sys/uio.h /usr/include/bits/uio.h \
  /usr/include/bits/socket.h /usr/include/bits/socket_type.h \
@@ -51,7 +48,7 @@ dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_mbuf.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_compat.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_mempool.h \
- /usr/include/inttypes.h \
+ /usr/include/inttypes.h /usr/include/sys/queue.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_spinlock.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/generic/rte_spinlock.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_lcore.h \
@@ -92,6 +89,8 @@ dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_spinlock.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ring.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ring_core.h \
+ /usr/include/string.h /usr/include/bits/string.h \
+ /usr/include/bits/string2.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_memzone.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ring_generic.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_ring_elem.h \
@@ -137,6 +136,8 @@ dep_data_structure.o = /home/chanawat/threshold_ips_dpdk/data_structure.c \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_mbuf_ptype.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_mbuf_core.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/generic/rte_atomic.h \
+ /usr/include/sys/time.h /usr/include/yaml.h \
+ /home/chanawat/threshold_ips_dpdk/data_structure.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_udp.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_tcp.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_hash.h \

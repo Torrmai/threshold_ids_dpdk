@@ -1,7 +1,11 @@
 title: configureV1
 basic_behavior:
-  verbose : true
-  time_interval: 10.0
+  verbose : false
+  time_interval: 10
   num_rules : 5
+#unit in Mb/s
+global_limit: 1000
 basic_limit:   
-  158.108.33.64 : 100
+  158.108.245.110 : 100
+  158.108.210.123 : 200
+  202.129.205.94 :  50
