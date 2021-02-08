@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <stdint.h>
+#include <yaml.h>
 
 #include <rte_ip.h>
 #include <rte_udp.h>
@@ -36,6 +37,8 @@ struct usage_stat{
 	uint64_t size_of_this_p;
 	uint8_t is_alert;
 }__rte_cache_aligned;
+extern int isVerbose;
+static uint64_t time_peroid = 10;
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
@@ -46,8 +49,10 @@ extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 
+struct rte_hash *host_hash;
 extern struct usage_stat host_stat[RECORD_ENTIRES][2];
 
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb);
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb);
 const char* show_IPv4(uint32_t addr);
+int init_host_lim();

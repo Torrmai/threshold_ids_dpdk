@@ -1,9 +1,121 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <sys/time.h>
+#include <yaml.h>
 #include "data_structure.h"
 int write_time = 0;
+int isVerbose = 0;
+int init_host_lim(){
+    FILE *fp = fopen("config.yaml","r");
+    yaml_parser_t parser;
+    yaml_event_t event;
+    bool isKey =false;
+    bool main_map = true;
+    if(!yaml_parser_initialize(&parser))
+        printf("Failed to initialize parser!\n");
+    yaml_parser_set_input_file(&parser,fp);
+
+    char keys[255];
+    char mapping_name[255][1000];
+    int mapping_index = 0;
+    int a[4];
+
+    //char pairValue[255];
+    do
+    {
+        if(!yaml_parser_parse(&parser,&event)){
+            printf("parser error %d\n",parser.error);
+            exit(EXIT_FAILURE);
+        }
+        switch (event.type)
+        {
+        case YAML_NO_EVENT:break;
+        case YAML_STREAM_START_EVENT:break;
+        case YAML_STREAM_END_EVENT:break;
+        //process delimeters
+        case YAML_DOCUMENT_START_EVENT:break;
+        case YAML_DOCUMENT_END_EVENT:break;
+        case YAML_SEQUENCE_START_EVENT:break;
+        case YAML_SEQUENCE_END_EVENT:break;
+        case YAML_MAPPING_START_EVENT:
+            //printf("isKey %d\n",isKey);
+            mapping_index++;
+            if (!isKey && ! main_map){ 
+                sprintf(mapping_name[mapping_index],"%s",keys);
+            }
+            else{
+                main_map = false;
+                sprintf(mapping_name[mapping_index],"main");
+            }
+            isKey = true;
+            break;
+        case YAML_MAPPING_END_EVENT:
+            mapping_index--;
+            break;
+        //data
+        case YAML_ALIAS_EVENT:
+            break;
+        case YAML_SCALAR_EVENT:
+            if (isKey)
+            {
+                //printf("%s\n",event.data.scalar.value);
+                sprintf(keys,"%s",event.data.scalar.value);
+                if (!strcmp(mapping_name[mapping_index],"basic_limit"))
+                {
+                    int i=0;
+                    char *token = strtok(event.data.scalar.value,".");
+                    while (token != NULL)
+                    {
+                        a[i] = strtol(token,NULL,10);
+                        token = strtok(NULL,".");
+                        i++;
+                    }
+                    
+                }              
+                isKey=false;
+            }
+            else{ 
+                isKey=true;
+                if (keys == "num_rules"){
+                    printf("%s----->%d\n",keys,strtol(event.data.scalar.value,NULL,10));
+                }
+                else if (keys == "time_interval")
+                {
+                    printf("%s----->%f\n",keys,strtof(event.data.scalar.value,NULL));
+                }
+                else if (!strcmp(keys,"verbose"))
+                {
+                    printf("verbose\n");
+                    printf("%s\n",event.data.scalar.value);
+                    if(!strcmp(event.data.scalar.value,"true")){
+                        isVerbose = 1;
+                        printf("%d\n",isVerbose);
+                    }
+                    else{
+                        isVerbose = 0;
+                    }
+                }
+                else
+                {
+                    printf("%s----->%s\n",keys,event.data.scalar.value);
+                }
+            }
+            break;
+        default: break;
+        }
+        if (event.type != YAML_STREAM_END_EVENT)
+        {
+            yaml_event_delete(&event);
+        }
+        
+    } while (event.type != YAML_STREAM_END_EVENT);
+    yaml_event_delete(&event);
+    yaml_parser_delete(&parser);
+    fclose(fp);
+    return 0;
+}
 void print_IPv6(uint8_t addr[],FILE *f){
     if(addr != NULL){
         char tmp_addr[4];

@@ -38,7 +38,7 @@
 #define CMD_LINE_OPT_NO_MAC_UPDATING "no-mac-updating"
 static uint16_t nb_rxd = 128;
 static uint16_t nb_txd = 512;
-static uint64_t time_peroid = 10;
+
 static int mac_updating = 1;
 static volatile bool force_quit;
 static struct rte_ether_addr ports_eth_addr[RTE_MAX_ETHPORTS];
@@ -106,7 +106,7 @@ static const struct option lgopts[] = {
 	{ CMD_LINE_OPT_NO_MAC_UPDATING, no_argument, &mac_updating, 0},
 	{NULL, 0, 0, 0}
 };
-static int isVerbose = 0;
+
 //statistical related data type
 struct basic_port_statistic{
 	uint64_t rx_packet;
@@ -142,7 +142,6 @@ struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
 struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
-
 
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
@@ -890,7 +889,8 @@ main(int argc, char **argv){
 	force_quit = false;
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
-	ret = parse_args(argc,argv);
+	//ret = parse_args(argc,argv);
+	ret = init_host_lim();
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE,"Invalid APP params\n");
 	printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());

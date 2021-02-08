@@ -23,8 +23,8 @@ PKGCONF ?= pkg-config
 
 PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
 CFLAGS += -O3 $(shell $(PKGCONF) --cflags libdpdk)
-LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk --libs sqlite3)
-LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk)
+LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
+LDFLAGS_STATIC = -Wl,-Bstatic $(shell $(PKGCONF) --static --libs libdpdk) 
 
 build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
 	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
@@ -53,6 +53,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 
 CFLAGS += $(WERROR_FLAGS) -std=c99
 LDLIBS += -lsqlite3
+LDLIBS += -lyaml
 # rte_eth_read_clock is experimental
 CFLAGS += -DALLOW_EXPERIMENTAL_API
 
