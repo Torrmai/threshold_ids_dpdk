@@ -612,12 +612,6 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-			/*if(ipv4_stat[res][isAdded].size_of_this_p > global_limit & ipv4_stat[res][isAdded].is_alert ==0 ){
-				sprintf(buff,"%s: %"PRIu16" -> %s: %"PRIu16" usage exceeding limit!!! ( %"PRIu64" bytes)",
-					show_IPv4(addr),port1,show_IPv4(dst_addr),port2,ipv4_stat[res][isAdded].size_of_this_p);
-				syslog(LOG_ALERT,buff);
-				rte_atomic64_add(&ipv6_stat[res][isAdded].is_alert,1);
-			}*/
 		}		
 	}
 	else if(target == "client_v4"){
@@ -672,13 +666,13 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			{
 			case 0x11:
 				udp_data = (struct rte_udp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-				dst_port = udp_data->dst_port;
-				src_port = udp_data->src_port;
+				dst_port = rte_cpu_to_be_16(udp_data->dst_port);
+				src_port = rte_cpu_to_be_16(udp_data->src_port);
 				break;
 			case 0x06:
 				tcp_data = (struct rte_tcp_hdr *)((char *)ipv4_hdr + sizeof(struct rte_ipv4_hdr));
-				dst_port = tcp_data->dst_port;
-				src_port = tcp_data->src_port;
+				dst_port = rte_cpu_to_be_16(tcp_data->dst_port);
+				src_port = rte_cpu_to_be_16(tcp_data->src_port);
 				break;
 			default:
 				src_port = 0;
@@ -936,94 +930,62 @@ main(int argc, char **argv){
 		printf("Done\n");
 	}
 	//init hash table for server roles
-	struct rte_hash_parameters params1 = {
-		.name = "ipv4_hash0",
-		.entries = RECORD_ENTIRES,
-		.key_len = sizeof(struct compo_keyV4),
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.socket_id = 0,
-
-	};
-	struct rte_hash_parameters params2 =
+	for (int i = 0; i < 2; i++)
 	{
-		.name = "ipv4_hash1",
-		.entries = RECORD_ENTIRES,
-		.key_len = sizeof(struct compo_keyV4),
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.socket_id = 0,
-	};
-	
-	hash_tb[0] = rte_hash_create(&params1);
-	if(!hash_tb[0]){
-		fprintf(stderr,"create hash0 failed\n");
-		return -1;
-	}
-	hash_tb[1] = rte_hash_create(&params2);
-	if(!hash_tb[1]){
-		fprintf(stderr,"create hash1 failed\n");
-		return -1;
+		char name[255];
+		sprintf(name,"ipv4_hash%d",i);
+		struct rte_hash_parameters params = {
+			.name = name,
+			.entries = RECORD_ENTIRES,
+			.key_len = sizeof(struct compo_keyV4),
+			.hash_func = rte_jhash,
+			.hash_func_init_val = 0,
+			.socket_id = 0,
+		};
+		hash_tb[i] = rte_hash_create(&params);
+		if(!hash_tb[i]){
+			fprintf(stderr,"create hash%d failed\n",i);
+			return -1;
+		}
 	}
 	//end of initialization of server roles
 	//client roles
-	struct rte_hash_parameters cli_param1 =
+	for (int i = 0; i < 2; i++)
 	{
-		.entries = RECORD_ENTIRES,
-		.key_len = sizeof (struct compo_keyV4),
-		.socket_id = 0,
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.name = "client hash1",
-	};
-	hash_tb_cli[0] = rte_hash_create(&cli_param1);
-	if(!hash_tb_cli[0]){
-		fprintf(stderr,"can't init client storage\n");
-		return -1;
+		char name[255];
+		sprintf(name,"client hash%d",i);
+		struct rte_hash_parameters params = {
+			.name = name,
+			.entries = RECORD_ENTIRES,
+			.key_len = sizeof(struct compo_keyV4),
+			.hash_func = rte_jhash,
+			.hash_func_init_val = 0,
+			.socket_id = 0,
+		};
+		hash_tb_cli[i] = rte_hash_create(&params);
+		if(!hash_tb_cli[i]){
+			fprintf(stderr,"create cleint%d failed\n",i);
+			return -1;
+		}
 	}
-	struct rte_hash_parameters cli_param2 =
+	//init hash table for server ipv6 roles
+	for (int i = 0; i < 2; i++)
 	{
-		.entries = RECORD_ENTIRES,
-		.key_len = sizeof (struct compo_keyV4),
-		.socket_id = 0,
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.name = "client hash2",
-	};
-	hash_tb_cli[1] = rte_hash_create(&cli_param2);
-	if(!hash_tb_cli[1]){
-		fprintf(stderr,"can't init client storage\n");
-		return -1;
-	}
-	//init hash table for server roles
-	struct rte_hash_parameters params1_v6 = {
-		.name = "ipv6_hash0",
-		.entries = RECORD_ENTIRES,
-		.key_len = sizeof(struct compo_keyV6),
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.socket_id = 0,
-
-	};
-	struct rte_hash_parameters params2_v6 =
-	{
-		.name = "ipv6_hash1",
-		.entries = RECORD_ENTIRES,
-		.key_len =sizeof(struct compo_keyV6),
-		.hash_func = rte_jhash,
-		.hash_func_init_val = 0,
-		.socket_id = 0,
-	};
-	
-	hash_tb_v6[0] = rte_hash_create(&params1_v6);
-	if(!hash_tb_v6[0]){
-		fprintf(stderr,"create hash0 failed\n");
-		return -1;
-	}
-	hash_tb_v6[1] = rte_hash_create(&params2_v6);
-	if(!hash_tb_v6[1]){
-		fprintf(stderr,"create hash1 failed\n");
-		return -1;
+		char name[255];
+		sprintf(name,"ipv6 hash%d",i);
+		struct rte_hash_parameters params = {
+			.name = name,
+			.entries = RECORD_ENTIRES,
+			.key_len = sizeof(struct compo_keyV6),
+			.hash_func = rte_jhash,
+			.hash_func_init_val = 0,
+			.socket_id = 0,
+		};
+		hash_tb_v6[i] = rte_hash_create(&params);
+		if(!hash_tb_v6[i]){
+			fprintf(stderr,"create ipv6%d failed\n",i);
+			return -1;
+		}
 	}
 	//end of initialization of server roles
 	check_all_ports_link_status();

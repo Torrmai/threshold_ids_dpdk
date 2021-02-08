@@ -46,6 +46,8 @@ extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 
+extern struct usage_stat host_stat[RECORD_ENTIRES][2];
+
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb);
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb);
 const char* show_IPv4(uint32_t addr);
