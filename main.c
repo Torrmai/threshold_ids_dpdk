@@ -630,7 +630,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			//basic classification
 			res = src%RECORD_ENTIRES;
 			if(host_lim[res].is_alert == 0 && (host_lim[res].realaddr == src || host_lim[res].realaddr == dst)){
-				printf("%"PRIu32"\n",src);
+				//printf("%"PRIu32"\n",src);
 				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
 				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);
 			}
@@ -785,15 +785,11 @@ main_loop(void)
 					//printf("%d\n",res);
 					if(host_lim[res].is_alert == 0)
 					{
-						if (host_lim[res].size_of_this_p <= host_stat[res][!isAdded].size_of_this_p)
+						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p)
 						{
 							printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
 							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p);
-							printf("%d\n",host_lim[res].is_alert);
-						}
-						else{
-							printf("%"PRIu32"\n",lim_addr[i]);
-							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p);
+							printf("Limit: %"PRIu64"\n",host_lim[res].size_of_this_p);
 						}
 						host_stat[res][!isAdded].size_of_this_p=0;
 						host_stat[res][!isAdded].n_pkt=0;

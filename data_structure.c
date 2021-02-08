@@ -115,7 +115,7 @@ int init_host_lim(){
                 if(!strcmp(mapping_name[mapping_index],"basic_limit"))
                 {
                     //printf("%d\n",a[0]);
-                    ipaddr = RTE_IPV4(a[0],a[1],a[2],a[3]);
+                    ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
                     //printf("%"PRIu32"\n",ipaddr);
                     /*res = rte_hash_add_key(tb,(void *)&ipaddr);
                     if(res <= 0){
@@ -139,7 +139,7 @@ int init_host_lim(){
                         idx++;
                         elem_lim = idx;
                         full_check =elem_lim;
-                        host_lim[res].size_of_this_p = 0;
+                        //host_lim[res].size_of_this_p = 0;
                         host_lim[res].realaddr = ipaddr;
                     }
                     else{
