@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <stdint.h>
+#include <yaml.h>
 
 #include <rte_ip.h>
 #include <rte_udp.h>
@@ -36,6 +37,14 @@ struct usage_stat{
 	uint64_t size_of_this_p;
 	uint8_t is_alert;
 }__rte_cache_aligned;
+struct node{
+	uint32_t ipaddr;
+	int index;
+	TAILQ_ENTRY(node) nodes;
+};
+typedef TAILQ_HEAD(head_s, node) head_t;
+extern int isVerbose;
+extern uint64_t time_peroid;
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
@@ -46,6 +55,18 @@ extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 
+struct diy_hash{
+	uint64_t n_pkt;
+	uint64_t size_of_this_p;
+	uint8_t is_alert;
+	uint32_t realaddr;
+}__rte_cache_aligned;
+extern uint32_t lim_addr[RECORD_ENTIRES];
+extern int elem_lim;
+extern struct diy_hash  host_lim[RECORD_ENTIRES];
+extern struct diy_hash host_stat[RECORD_ENTIRES][2];
+extern head_t head;
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb);
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb);
 const char* show_IPv4(uint32_t addr);
+int init_host_lim();

@@ -1,9 +1,9 @@
 # SENMON
 
-SENMON is a IPS/IDS written in C/C++
+SENMON is a IDS written in C/C++
 Here are main features
 
-- 10 Gb/s Throughput Garuntee
+- 9 Gb/s Throughput Garuntee
 - Compatible with COTS
 - Use thershold to detect anormaly usage
 

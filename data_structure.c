@@ -1,9 +1,189 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <rte_ip.h>
 #include <sys/queue.h>
 #include <sys/time.h>
+#include <yaml.h>
 #include "data_structure.h"
 int write_time = 0;
+int isVerbose = 0;
+int elem_lim;
+uint64_t time_peroid = 10;
+uint32_t lim_addr[RECORD_ENTIRES];
+struct diy_hash  host_lim[RECORD_ENTIRES];
+head_t head;
+int init_host_lim(){
+    uint32_t ipaddr;
+    int idx = 0;
+    FILE *fp = fopen("config.yaml","r");
+    yaml_parser_t parser;
+    yaml_event_t event;
+    bool isKey =false;
+    bool main_map = true;
+    if(!yaml_parser_initialize(&parser)){
+        printf("Failed to initialize parser!\n");
+        return -1;
+    }
+    yaml_parser_set_input_file(&parser,fp);
+    struct node *e = NULL;
+    char keys[255];
+    char mapping_name[255][1000];
+    int mapping_index = 0;
+    int a[4];
+    int res;
+    TAILQ_INIT(&head);
+    int full_check = 0;
+    //char pairValue[255];
+    do
+    {
+        if(!yaml_parser_parse(&parser,&event)){
+            printf("parser error %d\n",parser.error);
+            exit(EXIT_FAILURE);
+        }
+        switch (event.type)
+        {
+        case YAML_NO_EVENT:break;
+        case YAML_STREAM_START_EVENT:break;
+        case YAML_STREAM_END_EVENT:break;
+        //process delimeters
+        case YAML_DOCUMENT_START_EVENT:break;
+        case YAML_DOCUMENT_END_EVENT:break;
+        case YAML_SEQUENCE_START_EVENT:break;
+        case YAML_SEQUENCE_END_EVENT:break;
+        case YAML_MAPPING_START_EVENT:
+            //printf("isKey %d\n",isKey);
+            mapping_index++;
+            if (!isKey && ! main_map){ 
+                sprintf(mapping_name[mapping_index],"%s",keys);
+            }
+            else{
+                main_map = false;
+                sprintf(mapping_name[mapping_index],"main");
+            }
+            isKey = true;
+            break;
+        case YAML_MAPPING_END_EVENT:
+            mapping_index--;
+            break;
+        //data
+        case YAML_ALIAS_EVENT:
+            break;
+        case YAML_SCALAR_EVENT:
+            if (isKey)
+            {
+                //printf("%s\n",event.data.scalar.value);
+                sprintf(keys,"%s",event.data.scalar.value);
+                if (!strcmp(mapping_name[mapping_index],"basic_limit"))
+                {
+                    int i=0;
+                    char *token = strtok(event.data.scalar.value,".");
+                    while (token != NULL)
+                    {
+                        a[i] = strtol(token,NULL,10);
+                        token = strtok(NULL,".");
+                        i++;
+                    }
+                }              
+                isKey=false;
+            }
+            else{ 
+                isKey=true;
+                if (keys == "num_rules"){
+                    printf("%s----->%d\n",keys,strtol(event.data.scalar.value,NULL,10));
+                }
+                else if (keys == "time_interval")
+                {
+                    printf("%s----->%f\n",keys,strtof(event.data.scalar.value,NULL));
+                    time_peroid = strtold(event.data.scalar.value,NULL);
+                }
+                else if (!strcmp(keys,"verbose"))
+                {
+                    printf("verbose\n");
+                    printf("%s\n",event.data.scalar.value);
+                    if(!strcmp(event.data.scalar.value,"true")){
+                        isVerbose = 1;
+                    }
+                    else{
+                        isVerbose = 0;
+                    }
+                }
+                /*else
+                {
+                    printf("%s----->%s\n",keys,event.data.scalar.value);
+                }*/
+                if(!strcmp(mapping_name[mapping_index],"basic_limit"))
+                {
+                    //printf("%d\n",a[0]);
+                    ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
+                    //printf("%"PRIu32"\n",ipaddr);
+                    /*res = rte_hash_add_key(tb,(void *)&ipaddr);
+                    if(res <= 0){
+                        printf("Error\n");
+                        printf("%"PRIu32"\n",sizeof(uint32_t));
+                        printf("%"PRIu32"\n",RECORD_ENTIRES);
+                        return -1;
+                    }
+                    else
+                    {
+                        lim_addr[idx] = ipaddr;
+                        idx++;
+                        elem_lim = idx;
+                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                    }*/
+                    res = ipaddr%RECORD_ENTIRES;
+                    if(host_lim[res].size_of_this_p == 0){
+                        printf("Not collide\n");
+                        lim_addr[idx] = ipaddr;
+                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        idx++;
+                        elem_lim = idx;
+                        full_check =elem_lim;
+                        //host_lim[res].size_of_this_p = 0;
+                        host_lim[res].realaddr = ipaddr;
+                    }
+                    else{
+                        printf("collide\n");
+                        host_lim[res].is_alert = 1;//collision leaw
+                        int minus_flag = 0;
+                        while (host_lim[res].size_of_this_p != 0 && full_check <= RECORD_ENTIRES)
+                        {
+                            if(!minus_flag){
+                                res++;
+                                if(host_lim[res].size_of_this_p != 0 && res == RECORD_ENTIRES -1) minus_flag =1;
+                            }
+                            else
+                            {
+                                res--;
+                                if(host_lim[res].size_of_this_p != 0 && res == 0) minus_flag = 0;
+                            }
+                        }
+                        e = malloc(sizeof(struct node));
+                        if (e == NULL)
+                        {
+                            puts("malloc error");
+                            return -1;
+                        }
+                        e->ipaddr = ipaddr;
+                        e->index = res;
+                        TAILQ_INSERT_TAIL(&head,e,nodes);
+                    }
+                }
+            }
+            break;
+        default: break;
+        }
+        if (event.type != YAML_STREAM_END_EVENT)
+        {
+            yaml_event_delete(&event);
+        }
+        
+    } while (event.type != YAML_STREAM_END_EVENT);
+    yaml_event_delete(&event);
+    yaml_parser_delete(&parser);
+    fclose(fp);
+    return 0;
+}
 void print_IPv6(uint8_t addr[],FILE *f){
     if(addr != NULL){
         char tmp_addr[4];
@@ -21,24 +201,6 @@ void print_IPv6(uint8_t addr[],FILE *f){
         memset(ipv6_addr,0,sizeof(ipv6_addr)); 
     }
 }
-const char* show_IPv4(uint32_t addr){
-    char tmp_addr[50];
-    memset(tmp_addr,0,sizeof(tmp_addr));
-    sprintf(tmp_addr,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
-        (uint8_t)(addr & 0xff),
-        (uint8_t)((addr >> 8) & 0xff),
-        (uint8_t)((addr >> 16) & 0xff),
-        (uint8_t)((addr >> 24) & 0xff));
-    return tmp_addr;   
-}
-void print_ip(FILE *f,uint32_t addr){
-    fprintf(f,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8,
-        (uint8_t)(addr & 0xff),
-        (uint8_t)((addr >> 8) & 0xff),
-        (uint8_t)((addr >> 16) & 0xff),
-        (uint8_t)((addr >> 24) & 0xff));
-}
-
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
 {
     FILE *fp;
@@ -141,11 +303,25 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 }
                 else
                 {
-                    print_ip(fp,key_list[i][curr_tb].ipv4_addr);
-                    fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);
-                    print_ip(fp,key_list[i][curr_tb].ipv4_addr_dst);
-                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
-                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                    if(ipv4_stat[res][curr_tb].size_of_this_p >0 && ipv4_stat[res][curr_tb].n_pkt >0){
+                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr);
+                        fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
+                            (key_list[i][curr_tb].ipv4_addr&0xff),
+                            (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                            (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                            (key_list[i][curr_tb].ipv4_addr >> 24)&0xff
+                            );
+                        fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);
+                        fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
+                            (key_list[i][curr_tb].ipv4_addr_dst&0xff),
+                            (key_list[i][curr_tb].ipv4_addr_dst >> 8)&0xff,
+                            (key_list[i][curr_tb].ipv4_addr_dst >> 16)&0xff,
+                            (key_list[i][curr_tb].ipv4_addr_dst >> 24)&0xff
+                            );                        
+                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr_dst);
+                        fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
+                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                    }
                     //reset value
                     ipv4_stat[res][curr_tb].size_of_this_p = 0;
                     ipv4_stat[res][curr_tb].n_pkt = 0;
@@ -167,11 +343,26 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 }
                 else
                 {
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
-                    fprintf(fp,",%"PRIu16",",key_list_cli[i][curr_tb].src_port);
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr_dst);
-                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                    if(ipv4_cli[res][curr_tb].size_of_this_p > 0 &&ipv4_cli[res][curr_tb].n_pkt >0)
+                    {
+                        //print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
+                        fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
+                            (key_list_cli[i][curr_tb].ipv4_addr&0xff),
+                            (key_list_cli[i][curr_tb].ipv4_addr >> 8)&0xff,
+                            (key_list_cli[i][curr_tb].ipv4_addr >> 16)&0xff,
+                            (key_list_cli[i][curr_tb].ipv4_addr >> 24)&0xff
+                            );
+                        fprintf(fp,",%"PRIu16",",key_list_cli[i][curr_tb].src_port);
+                        //print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr_dst);
+                        fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
+                            (key_list_cli[i][curr_tb].ipv4_addr_dst&0xff),
+                            (key_list_cli[i][curr_tb].ipv4_addr_dst >> 8)&0xff,
+                            (key_list_cli[i][curr_tb].ipv4_addr_dst >> 16)&0xff,
+                            (key_list_cli[i][curr_tb].ipv4_addr_dst >> 24)&0xff
+                            );
+                        fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
+                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                    }
                     //reset value
                     rte_atomic64_set(&ipv4_cli[res][curr_tb].size_of_this_p,0);
                     rte_atomic64_set(&ipv4_cli[res][curr_tb].n_pkt,0);
