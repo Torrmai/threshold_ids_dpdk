@@ -1,0 +1,7 @@
+title: configureV1
+basic_behavior:
+  verbose : true
+  time_interval: 10.0
+  num_rules : 5
+basic_limit:   
+  158.108.33.64 : 100
