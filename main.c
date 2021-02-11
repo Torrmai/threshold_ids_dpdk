@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <syslog.h>
+#include <math.h>
 
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -512,6 +513,7 @@ print_stats(uint64_t tim)
 			,data_info[!isAdded].n_ipv6_pack,data_info[!isAdded].server_pack_v6,data_info[!isAdded].client_pack_v6,(data_info[!isAdded].ipv6_usage*8)/1000000);
 	
 	printf("\n====================================================\n");
+	printf("Time peroid%"PRIu64"\n",real_seconds);
 }
 
 //rfc 1812 check all code copy from l3fwd.h
@@ -792,9 +794,13 @@ main_loop(void)
 					{
 						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8)
 						{
-							printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
+							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
+							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %f",(lim_addr[i]&0xff)
+									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,usage);
+							//sleep(1);
+							/*printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
 							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p*8);
-							printf("Limit: %"PRIu64"\n",host_lim[res].size_of_this_p);
+							printf("Limit: %"PRIu64"\n",host_lim[res].size_of_this_p);*/
 						}
 						host_stat[res][!isAdded].size_of_this_p=0;
 						host_stat[res][!isAdded].n_pkt=0;
@@ -874,6 +880,7 @@ main(int argc, char **argv){
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE,"Invalid APP params\n");
 	printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());
+	real_seconds = time_peroid;
 	time_peroid *= rte_get_timer_hz();
 	nb_ports = rte_eth_dev_count_avail();
 	n_port = nb_ports;
@@ -971,7 +978,8 @@ main(int argc, char **argv){
 	check_all_ports_link_status();
 	//printf("Please enter usage limit: ");
 	//scanf("%"PRIu64,&global_limit);
-	//openlog("TEST IDS LOG JA",LOG_PID,LOG_USER);
+	openlog("TEST IDS LOG JA",LOG_PID,LOG_USER);
+	syslog(LOG_INFO,"Starting C process (Alert system,Packet processor,Data manager)");
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
@@ -994,6 +1002,7 @@ main(int argc, char **argv){
 		rte_hash_free(hash_tb_cli[i]);
 		rte_hash_free(hash_tb_v6[i]);
 	}
+	syslog(LOG_INFO,"Closing packet processor/data manager C process......");
 	closelog();
 	printf("Bye...\n");
 }

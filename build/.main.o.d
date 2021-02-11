@@ -20,7 +20,11 @@ dep_main.o = /home/chanawat/threshold_ips_dpdk/main.c \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdbool.h \
  /usr/include/syslog.h /usr/include/sys/syslog.h \
  /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdarg.h \
- /usr/include/bits/syslog-path.h \
+ /usr/include/bits/syslog-path.h /usr/include/math.h \
+ /usr/include/bits/huge_val.h /usr/include/bits/huge_valf.h \
+ /usr/include/bits/huge_vall.h /usr/include/bits/inf.h \
+ /usr/include/bits/nan.h /usr/include/bits/mathdef.h \
+ /usr/include/bits/mathcalls.h /usr/include/bits/mathinline.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_eal.h \
  /usr/include/sched.h /usr/include/bits/sched.h \
  /home/chanawat/dpdk-20.05/x86_x64-native-linux-gcc/include/rte_config.h \

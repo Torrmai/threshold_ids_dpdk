@@ -44,7 +44,8 @@ struct node{
 };
 typedef TAILQ_HEAD(head_s, node) head_t;
 extern int isVerbose;
-extern uint64_t time_peroid;
+extern uint64_t time_peroid;//use for counting cycle
+extern uint64_t real_seconds;
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];

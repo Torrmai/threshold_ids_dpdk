@@ -10,6 +10,7 @@ int write_time = 0;
 int isVerbose = 0;
 int elem_lim;
 uint64_t time_peroid = 10;
+uint64_t real_seconds;
 uint32_t lim_addr[RECORD_ENTIRES];
 struct diy_hash  host_lim[RECORD_ENTIRES];
 head_t head;
@@ -96,6 +97,7 @@ int init_host_lim(){
                 {
                     printf("%s----->%f\n",keys,strtof(event.data.scalar.value,NULL));
                     time_peroid = strtold(event.data.scalar.value,NULL);
+                    real_seconds = time_peroid;
                 }
                 else if (!strcmp(keys,"verbose"))
                 {

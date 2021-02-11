@@ -1,6 +1,6 @@
 title: configureV1
 basic_behavior:
-  verbose : false
+  verbose : true
   time_interval: 10
   num_rules : 5
 #unit in Mb/s
