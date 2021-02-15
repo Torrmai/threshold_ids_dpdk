@@ -641,30 +641,34 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
 				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);				
 			}
- 			if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
-			}
-			else if(src_port > 1024 && dst_port > 1024){
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
-			}
-			else if(src_port > 1024 && dst_port < 1024)
+			if (ipv4_hdr->next_proto_id == 0x06 && tcp_port_lim[src_port] > 0)
 			{
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
+ 				if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
+				}
+				else if(src_port > 1024 && dst_port > 1024){
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
+				}
+				else if(src_port > 1024 && dst_port < 1024)
+				{
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
+				}
+				else
+				{
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
+				}
 			}
-			else
-			{
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
-			}
+			
 			
 		}
 		break;
@@ -979,7 +983,7 @@ main(int argc, char **argv){
 	syslog(LOG_INFO,"Starting C process (Alert system,Packet processor,Data manager)");
 	ret = 0;
 	/* launch per-lcore init on every lcore */
-	/*rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
+	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		if (rte_eal_wait_lcore(lcore_id) < 0) {
 			ret = -1;
@@ -991,7 +995,7 @@ main(int argc, char **argv){
 		rte_eth_dev_stop(portid);
 		rte_eth_dev_close(portid);
 		printf(" Done\n");
-	}*/
+	}
 	for (int i = 0; i < 2; i++)
 	{
 		/* code */
