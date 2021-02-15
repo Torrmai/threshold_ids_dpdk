@@ -2,7 +2,7 @@ title: configureV1
 basic_behavior:
   verbose : true
   time_interval: 10
-  dump_all : true
+  dump_all : false
 #unit in Mb/s
 global_limit_Mbit_per_sec: 1000
 basic_limit:

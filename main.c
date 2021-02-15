@@ -560,6 +560,10 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+			if(l3_pro == 0x06 && (tcp_port_lim[port1] > ipv4_stat[res][isAdded].size_of_this_p ||tcp_port_lim[port2] > ipv4_stat[res][isAdded].size_of_this_p ))
+			{
+				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
 		}		
 	}
 	else if(target == "client_v4"){
@@ -581,6 +585,10 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
+			if(l3_pro == 0x06 && (tcp_port_lim[port1] > ipv4_cli[res][isAdded].size_of_this_p ||tcp_port_lim[port2] > ipv4_cli[res][isAdded].size_of_this_p ))
+			{
+				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+			}
 		}
 	}
 	memset(buff,0,sizeof(buff));
@@ -641,7 +649,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
 				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);				
 			}
-			if (ipv4_hdr->next_proto_id == 0x06 && tcp_port_lim[src_port] > 0)
+			if (ipv4_hdr->next_proto_id == 0x06 && (tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0))
 			{
  				if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
 					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
