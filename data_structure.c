@@ -9,6 +9,8 @@
 int write_time = 0;
 int isVerbose = 0;
 int elem_lim;
+int printAll;
+uint64_t tcp_port_lim[65536];
 uint64_t time_peroid = 10;
 uint64_t real_seconds;
 uint32_t lim_addr[RECORD_ENTIRES];
@@ -75,7 +77,7 @@ int init_host_lim(){
             {
                 //printf("%s\n",event.data.scalar.value);
                 sprintf(keys,"%s",event.data.scalar.value);
-                if (!strcmp(mapping_name[mapping_index],"basic_limit"))
+                if (!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
                 {
                     int i=0;
                     char *token = strtok(event.data.scalar.value,".");
@@ -95,26 +97,18 @@ int init_host_lim(){
                 }
                 else if (keys == "time_interval")
                 {
-                    printf("%s----->%f\n",keys,strtof(event.data.scalar.value,NULL));
                     time_peroid = strtold(event.data.scalar.value,NULL);
                     real_seconds = time_peroid;
                 }
                 else if (!strcmp(keys,"verbose"))
                 {
-                    printf("verbose\n");
-                    printf("%s\n",event.data.scalar.value);
-                    if(!strcmp(event.data.scalar.value,"true")){
-                        isVerbose = 1;
-                    }
-                    else{
-                        isVerbose = 0;
-                    }
+                    isVerbose = !strcmp(event.data.scalar.value,"true")? 1:0;
                 }
-                /*else
-                {
-                    printf("%s----->%s\n",keys,event.data.scalar.value);
-                }*/
-                if(!strcmp(mapping_name[mapping_index],"basic_limit"))
+                else if(!strcmp(keys,"dump_all")){
+                    printAll = !strcmp(event.data.scalar.value,"true")? 1:0;
+                }
+
+                if(!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
                 {
                     //printf("%d\n",a[0]);
                     ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
@@ -170,6 +164,12 @@ int init_host_lim(){
                         e->index = res;
                         TAILQ_INSERT_TAIL(&head,e,nodes);
                     }
+
+                }
+                else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_Mbit_per_sec")){
+                    int tmp_index = atoi(keys);
+                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value);
+                    //printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
                 }
             }
             break;

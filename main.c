@@ -795,12 +795,9 @@ main_loop(void)
 						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8)
 						{
 							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
-							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %f",(lim_addr[i]&0xff)
-									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,usage);
-							//sleep(1);
-							/*printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
-							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p*8);
-							printf("Limit: %"PRIu64"\n",host_lim[res].size_of_this_p);*/
+							uint64_t real_lim = (host_lim[res].size_of_this_p)/(10*10*10*10*10*10*real_seconds);
+							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"Mb/s (%f Mb/s for real use)",(lim_addr[i]&0xff)
+									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
 						}
 						host_stat[res][!isAdded].size_of_this_p=0;
 						host_stat[res][!isAdded].n_pkt=0;
@@ -982,7 +979,7 @@ main(int argc, char **argv){
 	syslog(LOG_INFO,"Starting C process (Alert system,Packet processor,Data manager)");
 	ret = 0;
 	/* launch per-lcore init on every lcore */
-	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
+	/*rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		if (rte_eal_wait_lcore(lcore_id) < 0) {
 			ret = -1;
@@ -994,7 +991,7 @@ main(int argc, char **argv){
 		rte_eth_dev_stop(portid);
 		rte_eth_dev_close(portid);
 		printf(" Done\n");
-	}
+	}*/
 	for (int i = 0; i < 2; i++)
 	{
 		/* code */
