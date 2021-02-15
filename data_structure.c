@@ -168,8 +168,8 @@ int init_host_lim(){
                 }
                 else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_Mbit_per_sec")){
                     int tmp_index = atoi(keys);
-                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value);
-                    //printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
+                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
                 }
             }
             break;
@@ -306,7 +306,6 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 else
                 {
                     if(ipv4_stat[res][curr_tb].is_alert){
-                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr);
                         fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
                             (key_list[i][curr_tb].ipv4_addr&0xff),
                             (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
@@ -320,10 +319,11 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list[i][curr_tb].ipv4_addr_dst >> 16)&0xff,
                             (key_list[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );                        
-                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr_dst);
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                        fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
                     }
+                    
                     //reset value
                     ipv4_stat[res][curr_tb].size_of_this_p = 0;
                     ipv4_stat[res][curr_tb].n_pkt = 0;
@@ -363,7 +363,8 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list_cli[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                        fprintf(fp,",%d\n",ipv4_cli[res][curr_tb].is_alert);
                     }
                     //reset value
                     rte_atomic64_set(&ipv4_cli[res][curr_tb].size_of_this_p,0);

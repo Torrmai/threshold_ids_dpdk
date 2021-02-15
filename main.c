@@ -514,6 +514,7 @@ print_stats(uint64_t tim)
 	
 	printf("\n====================================================\n");
 	printf("Time peroid%"PRIu64"\n",real_seconds);
+	printf("printAll %d\n",printAll);
 }
 
 //rfc 1812 check all code copy from l3fwd.h
@@ -560,7 +561,11 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-			if(l3_pro == 0x06 && (tcp_port_lim[port1] > ipv4_stat[res][isAdded].size_of_this_p ||tcp_port_lim[port2] > ipv4_stat[res][isAdded].size_of_this_p ))
+			if(l3_pro == 0x06 && ((tcp_port_lim[port1] < ipv4_stat[res][isAdded].size_of_this_p && tcp_port_lim[port1] > 0) ||(tcp_port_lim[port2] < ipv4_stat[res][isAdded].size_of_this_p && tcp_port_lim[port2] >0 )))
+			{
+				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
+			if(printAll)
 			{
 				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 			}
@@ -585,10 +590,18 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
-			if(l3_pro == 0x06 && (tcp_port_lim[port1] > ipv4_cli[res][isAdded].size_of_this_p ||tcp_port_lim[port2] > ipv4_cli[res][isAdded].size_of_this_p ))
+			if(l3_pro == 0x06 && ((tcp_port_lim[port1] < ipv4_cli[res][isAdded].size_of_this_p && tcp_port_lim[port1] > 0) ||(tcp_port_lim[port2] < ipv4_cli[res][isAdded].size_of_this_p && tcp_port_lim[port2] > 0)))
 			{
 				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 			}
+			else
+			{
+				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,0);
+			}
+			
+			/*if(printAll==1){
+				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+			}*/
 		}
 	}
 	memset(buff,0,sizeof(buff));
@@ -649,8 +662,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
 				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);				
 			}
-			if (ipv4_hdr->next_proto_id == 0x06 && (tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0))
-			{
+
  				if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
 					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
 					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
@@ -675,7 +687,6 @@ process_data(struct rte_mbuf *data,unsigned portid){
 					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
 					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
 				}
-			}
 			
 			
 		}
