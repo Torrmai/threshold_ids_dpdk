@@ -110,7 +110,6 @@ int init_host_lim(){
 
                 if(!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
                 {
-                    //printf("%d\n",a[0]);
                     ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
                     //printf("%"PRIu32"\n",ipaddr);
                     /*res = rte_hash_add_key(tb,(void *)&ipaddr);
