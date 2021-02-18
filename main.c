@@ -148,6 +148,8 @@ const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
 const struct rte_hash *hash_tb_v6[2];
 const struct rte_hash *limit_hash;
+uint64_t tcp_port_lim[65536];
+uint64_t udp_port_lim[65536];
 //struct rte_hash *hash_tb_v6_cli[2];
 
 uint32_t numkey[] = {0,0};
@@ -569,6 +571,9 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 					rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 				}
 			}
+			if(l3_pro == 0x11){
+				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 			}
@@ -603,6 +608,10 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 				{
 					rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 				}
+			}
+			if (l3_pro == 0x11)
+			{
+				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
@@ -1036,6 +1045,5 @@ main(int argc, char **argv){
 	}
 	syslog(LOG_INFO,"Closing packet processor/data manager C process......");
 	closelog();
-	printf("%"PRIu64"\n",tcp_port_lim[80]);
 	printf("Bye...\n");
 }

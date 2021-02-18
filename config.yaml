@@ -12,3 +12,5 @@ basic_limit:
   tcp_port_limit_Mbit_per_sec:
     80: 10
     8080: 1
+  udp_port_limit_Mbit_per_sec:
+    53: 1

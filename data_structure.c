@@ -76,7 +76,7 @@ int init_host_lim(){
             {
                 //printf("%s\n",event.data.scalar.value);
                 sprintf(keys,"%s",event.data.scalar.value);
-                if (!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
+                if (!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec") || !strcmp(mapping_name[mapping_index],"Host_packet_per_sec"))
                 {
                     int i=0;
                     char *token = strtok(event.data.scalar.value,".");
@@ -110,21 +110,6 @@ int init_host_lim(){
                 if(!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
                 {
                     ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
-                    //printf("%"PRIu32"\n",ipaddr);
-                    /*res = rte_hash_add_key(tb,(void *)&ipaddr);
-                    if(res <= 0){
-                        printf("Error\n");
-                        printf("%"PRIu32"\n",sizeof(uint32_t));
-                        printf("%"PRIu32"\n",RECORD_ENTIRES);
-                        return -1;
-                    }
-                    else
-                    {
-                        lim_addr[idx] = ipaddr;
-                        idx++;
-                        elem_lim = idx;
-                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
-                    }*/
                     res = ipaddr%RECORD_ENTIRES;
                     if(host_lim[res].size_of_this_p == 0){
                         printf("Not collide\n");
@@ -179,6 +164,10 @@ int init_host_lim(){
                     int tmp_index = atoi(keys);
                     tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
                     printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
+                }
+                else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_Mbit_per_sec")){
+                    int tmp_index = atoi(keys);
+                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
                 }
             }
             break;
