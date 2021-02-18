@@ -44,7 +44,9 @@ struct node{
 };
 typedef TAILQ_HEAD(head_s, node) head_t;
 extern int isVerbose;
-extern uint64_t time_peroid;
+extern int printAll;
+extern uint64_t time_peroid;//use for counting cycle
+extern uint64_t real_seconds;
 
 extern struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 extern struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
@@ -54,13 +56,16 @@ extern struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
+extern uint64_t tcp_port_lim[65536];
+extern uint64_t udp_port_lim[65536];
 
-struct diy_hash{
+typedef struct diy_hash{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 	uint8_t is_alert;
 	uint32_t realaddr;
-}__rte_cache_aligned;
+	struct diy_hash *next;
+}__rte_cache_aligned diy_elem;
 extern uint32_t lim_addr[RECORD_ENTIRES];
 extern int elem_lim;
 extern struct diy_hash  host_lim[RECORD_ENTIRES];

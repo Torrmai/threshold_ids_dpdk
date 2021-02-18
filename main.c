@@ -6,6 +6,7 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <syslog.h>
+#include <math.h>
 
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -146,6 +147,9 @@ struct diy_hash host_stat[RECORD_ENTIRES][2];
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
 const struct rte_hash *hash_tb_v6[2];
+const struct rte_hash *limit_hash;
+uint64_t tcp_port_lim[65536];
+uint64_t udp_port_lim[65536];
 //struct rte_hash *hash_tb_v6_cli[2];
 
 uint32_t numkey[] = {0,0};
@@ -512,6 +516,8 @@ print_stats(uint64_t tim)
 			,data_info[!isAdded].n_ipv6_pack,data_info[!isAdded].server_pack_v6,data_info[!isAdded].client_pack_v6,(data_info[!isAdded].ipv6_usage*8)/1000000);
 	
 	printf("\n====================================================\n");
+	printf("Time peroid%"PRIu64"\n",real_seconds);
+	printf("printAll %d\n",printAll);
 }
 
 //rfc 1812 check all code copy from l3fwd.h
@@ -530,7 +536,7 @@ is_valid_ipv4_pkt(struct rte_ipv4_hdr *pkt,uint32_t len)
 }
 //process section
 static void
-add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3_pro,uint32_t dst_addr,char *target)
+add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3_pro,uint32_t dst_addr,char *target,int setflag)
 {
 	//add data to my defined array
 	struct compo_keyV4 tmp_key;
@@ -558,6 +564,23 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
+			if(l3_pro == 0x06)
+			{
+				if(tcp_port_lim[port1]>0 || tcp_port_lim[port2] > 0)
+				{
+					rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+				}
+			}
+			if(l3_pro == 0x11){
+				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
+			if(setflag){
+				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
+			if(printAll)
+			{
+				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+			}
 		}		
 	}
 	else if(target == "client_v4"){
@@ -579,6 +602,23 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
+			if(l3_pro == 0x06)
+			{
+				if (tcp_port_lim[port1] >0 || tcp_port_lim[port2] > 0)
+				{
+					rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+				}
+			}
+			if (l3_pro == 0x11)
+			{
+				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+			}
+			if(setflag){
+				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+			}		
+			if(printAll==1){//default case?
+				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+			}
 		}
 	}
 	memset(buff,0,sizeof(buff));
@@ -586,6 +626,7 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 static void
 process_data(struct rte_mbuf *data,unsigned portid){
 	int res,res2;
+	int collect = 0;
 	struct rte_ether_hdr *l2_hdr;
 	struct compo_keyV6 tmp_s;
 	uint16_t eth_type;
@@ -629,35 +670,44 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			}
 			//basic classification
 			res = src%RECORD_ENTIRES;
-			if(host_lim[res].is_alert == 0 && (host_lim[res].realaddr == src || host_lim[res].realaddr == dst)){
+			res2 = dst%RECORD_ENTIRES;
+			if(host_lim[res].is_alert == 0 && host_lim[res].realaddr == src){
 				//printf("%"PRIu32"\n",src);
 				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
 				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);
+				collect = 1;
 			}
- 			if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
+			if(host_lim[res2].is_alert == 0 && host_lim[res2].realaddr == dst){
+				rte_atomic64_add(&host_stat[res][isAdded].size_of_this_p,data->pkt_len);
+				rte_atomic64_add(&host_stat[res][isAdded].n_pkt,1);
+				collect = 1;				
 			}
-			else if(src_port > 1024 && dst_port > 1024){
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4");
-			}
-			else if(src_port > 1024 && dst_port < 1024)
-			{
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
-			}
-			else
-			{
-				rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-				add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4");
-				add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4");
-			}
+
+ 				if(src_port < 1024 && (ipv4_hdr->next_proto_id == 0x06 || ipv4_hdr->next_proto_id == 0x11)){
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4",collect);
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4",collect);
+				}
+				else if(src_port > 1024 && dst_port > 1024){
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4",collect);
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4",collect);
+				}
+				else if(src_port > 1024 && dst_port < 1024)
+				{
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4",collect);
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4",collect);
+				}
+				else
+				{
+					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
+					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4",collect);
+					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4",collect);
+				}
+			
 			
 		}
 		break;
@@ -785,11 +835,12 @@ main_loop(void)
 					//printf("%d\n",res);
 					if(host_lim[res].is_alert == 0)
 					{
-						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p)
+						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8)
 						{
-							printf("Hittt %"PRIu32"\n",host_lim[res].realaddr);
-							printf("%"PRIu64"\n",host_stat[res][!isAdded].size_of_this_p);
-							printf("Limit: %"PRIu64"\n",host_lim[res].size_of_this_p);
+							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
+							uint64_t real_lim = (host_lim[res].size_of_this_p)/(10*10*10*10*10*10*real_seconds);
+							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"Mb/s (%f Mb/s for real use)",(lim_addr[i]&0xff)
+									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
 						}
 						host_stat[res][!isAdded].size_of_this_p=0;
 						host_stat[res][!isAdded].n_pkt=0;
@@ -869,6 +920,7 @@ main(int argc, char **argv){
 	if(ret < 0)
 		rte_exit(EXIT_FAILURE,"Invalid APP params\n");
 	printf("timer: %"PRIu64" CPU cycle: %"PRIu64"\n",time_peroid,rte_get_timer_hz());
+	real_seconds = time_peroid;
 	time_peroid *= rte_get_timer_hz();
 	nb_ports = rte_eth_dev_count_avail();
 	n_port = nb_ports;
@@ -963,10 +1015,12 @@ main(int argc, char **argv){
 		}
 	}
 	//end of initialization of server roles
+	
 	check_all_ports_link_status();
 	//printf("Please enter usage limit: ");
 	//scanf("%"PRIu64,&global_limit);
-	//openlog("TEST IDS LOG JA",LOG_PID,LOG_USER);
+	openlog("TEST IDS LOG JA",LOG_PID,LOG_USER);
+	syslog(LOG_INFO,"Starting C process (Alert system,Packet processor,Data manager)");
 	ret = 0;
 	/* launch per-lcore init on every lcore */
 	rte_eal_mp_remote_launch(myapp_launch_one_lcore, NULL, CALL_MASTER);
@@ -989,6 +1043,7 @@ main(int argc, char **argv){
 		rte_hash_free(hash_tb_cli[i]);
 		rte_hash_free(hash_tb_v6[i]);
 	}
+	syslog(LOG_INFO,"Closing packet processor/data manager C process......");
 	closelog();
 	printf("Bye...\n");
 }

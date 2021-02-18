@@ -1,11 +1,16 @@
 title: configureV1
 basic_behavior:
-  verbose : false
+  verbose : true
   time_interval: 10
-  num_rules : 5
+  dump_all : false
 #unit in Mb/s
-global_limit: 1000
-basic_limit:   
-  74.125.213.210 : 100
-  158.108.210.123 : 20
-  202.129.205.94 :  10
+global_limit_Mbit_per_sec: 1000
+basic_limit:
+  Host_Mbit_per_sec:   
+    202.129.205.94 :  50
+    74.125.213.240 : 100
+  tcp_port_limit_Mbit_per_sec:
+    80: 10
+    8080: 1
+  udp_port_limit_Mbit_per_sec:
+    53: 1

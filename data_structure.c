@@ -9,7 +9,10 @@
 int write_time = 0;
 int isVerbose = 0;
 int elem_lim;
+int printAll;
+uint64_t tcp_port_lim[65536];
 uint64_t time_peroid = 10;
+uint64_t real_seconds;
 uint32_t lim_addr[RECORD_ENTIRES];
 struct diy_hash  host_lim[RECORD_ENTIRES];
 head_t head;
@@ -32,7 +35,6 @@ int init_host_lim(){
     int mapping_index = 0;
     int a[4];
     int res;
-    TAILQ_INIT(&head);
     int full_check = 0;
     //char pairValue[255];
     do
@@ -74,7 +76,7 @@ int init_host_lim(){
             {
                 //printf("%s\n",event.data.scalar.value);
                 sprintf(keys,"%s",event.data.scalar.value);
-                if (!strcmp(mapping_name[mapping_index],"basic_limit"))
+                if (!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec") || !strcmp(mapping_name[mapping_index],"Host_packet_per_sec"))
                 {
                     int i=0;
                     char *token = strtok(event.data.scalar.value,".");
@@ -94,80 +96,78 @@ int init_host_lim(){
                 }
                 else if (keys == "time_interval")
                 {
-                    printf("%s----->%f\n",keys,strtof(event.data.scalar.value,NULL));
                     time_peroid = strtold(event.data.scalar.value,NULL);
+                    real_seconds = time_peroid;
                 }
                 else if (!strcmp(keys,"verbose"))
                 {
-                    printf("verbose\n");
-                    printf("%s\n",event.data.scalar.value);
-                    if(!strcmp(event.data.scalar.value,"true")){
-                        isVerbose = 1;
-                    }
-                    else{
-                        isVerbose = 0;
-                    }
+                    isVerbose = !strcmp(event.data.scalar.value,"true")? 1:0;
                 }
-                /*else
+                else if(!strcmp(keys,"dump_all")){
+                    printAll = !strcmp(event.data.scalar.value,"true")? 1:0;
+                }
+
+                if(!strcmp(mapping_name[mapping_index],"Host_Mbit_per_sec"))
                 {
-                    printf("%s----->%s\n",keys,event.data.scalar.value);
-                }*/
-                if(!strcmp(mapping_name[mapping_index],"basic_limit"))
-                {
-                    //printf("%d\n",a[0]);
                     ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
-                    //printf("%"PRIu32"\n",ipaddr);
-                    /*res = rte_hash_add_key(tb,(void *)&ipaddr);
-                    if(res <= 0){
-                        printf("Error\n");
-                        printf("%"PRIu32"\n",sizeof(uint32_t));
-                        printf("%"PRIu32"\n",RECORD_ENTIRES);
-                        return -1;
-                    }
-                    else
-                    {
-                        lim_addr[idx] = ipaddr;
-                        idx++;
-                        elem_lim = idx;
-                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
-                    }*/
                     res = ipaddr%RECORD_ENTIRES;
                     if(host_lim[res].size_of_this_p == 0){
                         printf("Not collide\n");
                         lim_addr[idx] = ipaddr;
                         host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        host_lim[res].next = NULL;
                         idx++;
                         elem_lim = idx;
                         full_check =elem_lim;
                         //host_lim[res].size_of_this_p = 0;
                         host_lim[res].realaddr = ipaddr;
+                        host_stat[res][0].realaddr = ipaddr;
+                        host_stat[res][1].realaddr = ipaddr;
+                        host_stat[res][0].next = NULL;
+                        host_stat[res][1].next = NULL;
                     }
                     else{
                         printf("collide\n");
                         host_lim[res].is_alert = 1;//collision leaw
                         int minus_flag = 0;
-                        while (host_lim[res].size_of_this_p != 0 && full_check <= RECORD_ENTIRES)
+                        diy_elem *curr = &host_lim[res];
+                        while (curr->next != NULL)
                         {
-                            if(!minus_flag){
-                                res++;
-                                if(host_lim[res].size_of_this_p != 0 && res == RECORD_ENTIRES -1) minus_flag =1;
-                            }
-                            else
-                            {
-                                res--;
-                                if(host_lim[res].size_of_this_p != 0 && res == 0) minus_flag = 0;
-                            }
+                            curr = curr->next;
                         }
-                        e = malloc(sizeof(struct node));
-                        if (e == NULL)
+                        curr->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        curr->next->realaddr = ipaddr;
+                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        curr->next->next = NULL;
+                        diy_elem *test = &host_stat[res][0];
+                        while (test->next != NULL)
                         {
-                            puts("malloc error");
-                            return -1;
+                            test = test->next;
                         }
-                        e->ipaddr = ipaddr;
-                        e->index = res;
-                        TAILQ_INSERT_TAIL(&head,e,nodes);
+                        test->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        test->next->realaddr = ipaddr;
+                        test->next->size_of_this_p = 0;
+                        test->next->next =NULL;
+                        diy_elem *curr2 = &host_stat[res][0];
+                        while (curr2->next != NULL)
+                        {
+                            curr2 = curr2->next;
+                        }
+                        curr2->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        curr2->next->realaddr = ipaddr;
+                        curr2->next->size_of_this_p = 0;
+                        curr2->next->next = NULL;
                     }
+
+                }
+                else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_Mbit_per_sec")){
+                    int tmp_index = atoi(keys);
+                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
+                }
+                else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_Mbit_per_sec")){
+                    int tmp_index = atoi(keys);
+                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
                 }
             }
             break;
@@ -303,8 +303,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 }
                 else
                 {
-                    if(ipv4_stat[res][curr_tb].size_of_this_p >0 && ipv4_stat[res][curr_tb].n_pkt >0){
-                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr);
+                    if(ipv4_stat[res][curr_tb].is_alert){
                         fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
                             (key_list[i][curr_tb].ipv4_addr&0xff),
                             (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
@@ -318,10 +317,11 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list[i][curr_tb].ipv4_addr_dst >> 16)&0xff,
                             (key_list[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );                        
-                        //print_ip(fp,key_list[i][curr_tb].ipv4_addr_dst);
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
+                        fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
                     }
+                    
                     //reset value
                     ipv4_stat[res][curr_tb].size_of_this_p = 0;
                     ipv4_stat[res][curr_tb].n_pkt = 0;
@@ -343,7 +343,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 }
                 else
                 {
-                    if(ipv4_cli[res][curr_tb].size_of_this_p > 0 &&ipv4_cli[res][curr_tb].n_pkt >0)
+                    if(ipv4_cli[res][curr_tb].is_alert)
                     {
                         //print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
                         fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
@@ -361,7 +361,8 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list_cli[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                        fprintf(fp,",%d\n",ipv4_cli[res][curr_tb].is_alert);
                     }
                     //reset value
                     rte_atomic64_set(&ipv4_cli[res][curr_tb].size_of_this_p,0);
