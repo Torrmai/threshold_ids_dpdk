@@ -147,6 +147,7 @@ struct diy_hash host_stat[RECORD_ENTIRES][2];
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
 const struct rte_hash *hash_tb_v6[2];
+const struct rte_hash *limit_hash;
 //struct rte_hash *hash_tb_v6_cli[2];
 
 uint32_t numkey[] = {0,0};
@@ -561,15 +562,15 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_stat[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_stat[res][isAdded].n_pkt,1);
-			if(l3_pro == 0x06 && ((tcp_port_lim[port1] < ipv4_stat[res][isAdded].size_of_this_p && tcp_port_lim[port1] > 0) ||(tcp_port_lim[port2] < ipv4_stat[res][isAdded].size_of_this_p && tcp_port_lim[port2] >0 )))
+			if(l3_pro == 0x06)
 			{
-				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+				if(tcp_port_lim[port1]>0 || tcp_port_lim[port2] > 0)
+				{
+					rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+				}
 			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
-			}
-			else{
-				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,0);
 			}
 			if(printAll)
 			{
@@ -596,20 +597,16 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 		else{
 			rte_atomic64_add(&ipv4_cli[res][isAdded].size_of_this_p,size);
 			rte_atomic64_add(&ipv4_cli[res][isAdded].n_pkt,1);
-			if(l3_pro == 0x06 && ((tcp_port_lim[port1] < ipv4_cli[res][isAdded].size_of_this_p*8 && tcp_port_lim[port1] > 0) ||(tcp_port_lim[port2] < ipv4_cli[res][isAdded].size_of_this_p*8 && tcp_port_lim[port2] > 0)))
+			if(l3_pro == 0x06)
 			{
-				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
-			}
-			else
-			{
-				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,0);
+				if (tcp_port_lim[port1] >0 || tcp_port_lim[port2] > 0)
+				{
+					rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+				}
 			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
-			}
-			else{
-				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,0);
-			}			
+			}		
 			if(printAll==1){//default case?
 				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 			}
@@ -1009,6 +1006,7 @@ main(int argc, char **argv){
 		}
 	}
 	//end of initialization of server roles
+	
 	check_all_ports_link_status();
 	//printf("Please enter usage limit: ");
 	//scanf("%"PRIu64,&global_limit);
@@ -1038,5 +1036,6 @@ main(int argc, char **argv){
 	}
 	syslog(LOG_INFO,"Closing packet processor/data manager C process......");
 	closelog();
+	printf("%"PRIu64"\n",tcp_port_lim[80]);
 	printf("Bye...\n");
 }

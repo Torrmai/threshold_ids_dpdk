@@ -35,7 +35,6 @@ int init_host_lim(){
     int mapping_index = 0;
     int a[4];
     int res;
-    TAILQ_INIT(&head);
     int full_check = 0;
     //char pairValue[255];
     do
@@ -131,37 +130,48 @@ int init_host_lim(){
                         printf("Not collide\n");
                         lim_addr[idx] = ipaddr;
                         host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        host_lim[res].next = NULL;
                         idx++;
                         elem_lim = idx;
                         full_check =elem_lim;
                         //host_lim[res].size_of_this_p = 0;
                         host_lim[res].realaddr = ipaddr;
+                        host_stat[res][0].realaddr = ipaddr;
+                        host_stat[res][1].realaddr = ipaddr;
+                        host_stat[res][0].next = NULL;
+                        host_stat[res][1].next = NULL;
                     }
                     else{
                         printf("collide\n");
                         host_lim[res].is_alert = 1;//collision leaw
                         int minus_flag = 0;
-                        while (host_lim[res].size_of_this_p != 0 && full_check <= RECORD_ENTIRES)
+                        diy_elem *curr = &host_lim[res];
+                        while (curr->next != NULL)
                         {
-                            if(!minus_flag){
-                                res++;
-                                if(host_lim[res].size_of_this_p != 0 && res == RECORD_ENTIRES -1) minus_flag =1;
-                            }
-                            else
-                            {
-                                res--;
-                                if(host_lim[res].size_of_this_p != 0 && res == 0) minus_flag = 0;
-                            }
+                            curr = curr->next;
                         }
-                        e = malloc(sizeof(struct node));
-                        if (e == NULL)
+                        curr->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        curr->next->realaddr = ipaddr;
+                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        curr->next->next = NULL;
+                        diy_elem *test = &host_stat[res][0];
+                        while (test->next != NULL)
                         {
-                            puts("malloc error");
-                            return -1;
+                            test = test->next;
                         }
-                        e->ipaddr = ipaddr;
-                        e->index = res;
-                        TAILQ_INSERT_TAIL(&head,e,nodes);
+                        test->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        test->next->realaddr = ipaddr;
+                        test->next->size_of_this_p = 0;
+                        test->next->next =NULL;
+                        diy_elem *curr2 = &host_stat[res][0];
+                        while (curr2->next != NULL)
+                        {
+                            curr2 = curr2->next;
+                        }
+                        curr2->next = (diy_elem *)malloc(sizeof(diy_elem));
+                        curr2->next->realaddr = ipaddr;
+                        curr2->next->size_of_this_p = 0;
+                        curr2->next->next = NULL;
                     }
 
                 }

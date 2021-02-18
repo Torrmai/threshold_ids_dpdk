@@ -59,12 +59,13 @@ extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
 extern uint64_t tcp_port_lim[65536];
 extern uint64_t udp_port_lim[65536];
 
-struct diy_hash{
+typedef struct diy_hash{
 	uint64_t n_pkt;
 	uint64_t size_of_this_p;
 	uint8_t is_alert;
 	uint32_t realaddr;
-}__rte_cache_aligned;
+	struct diy_hash *next;
+}__rte_cache_aligned diy_elem;
 extern uint32_t lim_addr[RECORD_ENTIRES];
 extern int elem_lim;
 extern struct diy_hash  host_lim[RECORD_ENTIRES];
