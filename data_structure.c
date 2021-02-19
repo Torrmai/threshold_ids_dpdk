@@ -169,6 +169,26 @@ int init_host_lim(){
                     int tmp_index = atoi(keys);
                     udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
                 }
+                else if(!strcmp(mapping_name[mapping_index],"Host_packet_per_sec"))
+                {
+                    
+                    ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
+                    res = ipaddr%RECORD_ENTIRES;
+                    if(host_lim[res].realaddr == ipaddr || host_lim[res].realaddr == 0)
+                    {
+                        if(host_lim[res].realaddr == 0){
+                            //น่าจะมีผิดแถวนี้
+                            lim_addr[idx] = ipaddr;
+                            idx++;
+                            host_stat[res][0].realaddr = ipaddr;
+                            host_stat[res][1].realaddr = ipaddr;
+                        } 
+                        host_lim[res].realaddr = ipaddr;
+                        host_lim[res].n_pkt = atoi(event.data.scalar.value)*time_peroid;
+                        host_lim[res].next = NULL;
+                    }
+                    printf("%"PRIu32" %"PRIu64"\n",ipaddr,host_lim[res].n_pkt);
+                }
             }
             break;
         default: break;

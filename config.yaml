@@ -14,3 +14,6 @@ basic_limit:
     8080: 1
   udp_port_limit_Mbit_per_sec:
     53: 1
+  Host_packet_per_sec:
+    158.108.210.123 : 3
+    202.170.115.80 : 3
