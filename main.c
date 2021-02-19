@@ -835,7 +835,7 @@ main_loop(void)
 					//printf("%d\n",res);
 					if(host_lim[res].is_alert == 0)
 					{
-						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8)
+						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8 && host_lim[res].size_of_this_p > 0)
 						{
 							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
 							uint64_t real_lim = (host_lim[res].size_of_this_p)/(10*10*10*10*10*10*real_seconds);
@@ -845,7 +845,7 @@ main_loop(void)
 						if (host_lim[res].n_pkt < host_stat[res][!isAdded].n_pkt && host_lim[res].n_pkt > 0)//แก้ตรงนี้แน่นอน
 						{
 							float usage = (float)(host_stat[res][!isAdded].n_pkt)/(float)(real_seconds);
-							uint64_t real_lim = (host_lim[res].size_of_this_p)/(real_seconds);
+							uint64_t real_lim = (host_lim[res].n_pkt)/(real_seconds);
 							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"pps (%f pps for real use)",(lim_addr[i]&0xff)
 									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
 						}

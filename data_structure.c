@@ -180,6 +180,7 @@ int init_host_lim(){
                             //น่าจะมีผิดแถวนี้
                             lim_addr[idx] = ipaddr;
                             idx++;
+                            elem_lim = idx;
                             host_stat[res][0].realaddr = ipaddr;
                             host_stat[res][1].realaddr = ipaddr;
                         } 
