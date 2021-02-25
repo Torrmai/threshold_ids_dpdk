@@ -56,8 +56,11 @@ extern struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 extern struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 extern struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
+extern struct usage_stat ipv6_cli[RECORD_ENTIRES][2];
 extern uint64_t tcp_port_lim[65536];
 extern uint64_t udp_port_lim[65536];
+extern uint64_t tcp_port_lim_pps[65536];
+extern uint64_t udp_port_lim_pps[65536];
 
 typedef struct diy_hash{
 	uint64_t n_pkt;

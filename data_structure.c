@@ -11,6 +11,8 @@ int isVerbose = 0;
 int elem_lim;
 int printAll;
 uint64_t tcp_port_lim[65536];
+uint64_t tcp_port_lim_pps[65536];
+uint64_t udp_port_lim_pps[65536];
 uint64_t time_peroid = 10;
 uint64_t real_seconds;
 uint32_t lim_addr[RECORD_ENTIRES];
@@ -177,7 +179,6 @@ int init_host_lim(){
                     if(host_lim[res].realaddr == ipaddr || host_lim[res].realaddr == 0)
                     {
                         if(host_lim[res].realaddr == 0){
-                            //น่าจะมีผิดแถวนี้
                             lim_addr[idx] = ipaddr;
                             idx++;
                             elem_lim = idx;
@@ -190,6 +191,15 @@ int init_host_lim(){
                     }
                     printf("%"PRIu32" %"PRIu64"\n",ipaddr,host_lim[res].n_pkt);
                 }
+                else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_packet_per_sec")){
+                    int tmp_index = atoi(keys);
+                    udp_port_lim_pps[tmp_index] = atoi(event.data.scalar.value)*time_peroid;
+                }
+                else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_packet_per_sec")){
+                    int tmp_index = atoi(keys);
+                    tcp_port_lim_pps[tmp_index] = atoi(event.data.scalar.value)*time_peroid;
+                }
+ 
             }
             break;
         default: break;
@@ -256,10 +266,11 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
                             printf("error\n");
                         }
                     }
-                    else
+                    else if(ipv6_stat[res][curr_tb].size_of_this_p > 0)
                     {
+
                         print_IPv6(key_list6[i][curr_tb].ipv6_addr,fp);
-                        fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);
+                        fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);                       
                         print_IPv6(key_list6[i][curr_tb].ipv6_addr_dst,fp);
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list6[i][curr_tb].dst_port,key_list6[i][curr_tb].l3_pro);
                         fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv6_stat[res][curr_tb].size_of_this_p * 8,ipv6_stat[res][curr_tb].n_pkt);
