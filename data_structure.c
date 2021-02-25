@@ -282,30 +282,30 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
             }
             fclose(fp);
         }
-        /*else if(target == "client"){
+        else if(target == "client"){
             for (int i = 0; i < numelem; i++)
             {
-                res = rte_hash_lookup(tb,(void *)&key_list_cli[i][curr_tb]);
+                res = rte_hash_lookup(tb,(void *)&key_list_cli6[i][curr_tb]);
                 if(res < 0){
                     if(res == -EINVAL){
                         printf("error\n");
                     }
                     printf(res);
                 }
-                else
+                else if(ipv6_cli[res][curr_tb].size_of_this_p > 0)
                 {
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
-                    fprintf(fp,",%"PRIu16",",key_list_cli[i][curr_tb].src_port);
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr_dst);
-                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                    print_IPv6(key_list_cli6[i][curr_tb].ipv6_addr,fp);
+                    fprintf(fp,",%"PRIu16",",key_list_cli6[i][curr_tb].src_port);
+                    print_IPv6(key_list_cli6[i][curr_tb].ipv6_addr_dst,fp);
+                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli6[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
+                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv6_cli[res][curr_tb].size_of_this_p * 8,ipv6_cli[res][curr_tb].n_pkt);
                 }
                 //reset value
-                ipv4_cli[res][curr_tb].size_of_this_p = 0;
-                ipv4_cli[res][curr_tb].n_pkt = 0;
+                ipv6_cli[res][curr_tb].size_of_this_p = 0;
+                ipv6_cli[res][curr_tb].n_pkt = 0;
             }
             fclose(fp);
-        }*/
+        }
     }else{
         write_time++;
     }

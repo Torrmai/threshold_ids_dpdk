@@ -140,9 +140,11 @@ struct max_mem{
 struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
+struct usage_stat ipv6_cli[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
 struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 struct diy_hash host_stat[RECORD_ENTIRES][2];
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
@@ -155,6 +157,7 @@ uint64_t udp_port_lim[65536];
 uint32_t numkey[] = {0,0};
 uint32_t numkey_cli[] = {0,0};
 uint32_t numkeyV6[] = {0,0};
+uint32_t numkey_cliV6[] ={0,0};
 unsigned n_port;
 int elem_lim;
 uint32_t lim_addr[RECORD_ENTIRES];
@@ -644,6 +647,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	uint16_t src_port = 0;
 	uint16_t dst_port = 0;
 	int indexV6;
+	int indexV6_cli;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
@@ -771,6 +775,23 @@ process_data(struct rte_mbuf *data,unsigned portid){
 		else if(src_port >1024 || dst_port > 1024)
 		{
 			rte_atomic64_add(&data_info[isAdded].client_pack_v6,1);
+			if((void *)&tmp_s != NULL & tmp_s.ipv6_addr != NULL & tmp_s.ipv6_addr_dst != NULL){
+				res = rte_hash_add_key(hash_tb_v6_cli[isAdded],(void *)&tmp_s);
+				if(res <0)
+				{
+					if(res == -EINVAL){
+						printf("Invalid param?\n");
+					}
+					if(res == -ENOSPC){
+						printf("No space?\n");
+					}
+				}
+				indexV6_cli = rte_hash_count(hash_tb_v6_cli[isAdded]) - 1;
+				key_list_cli6[indexV6_cli][isAdded] = tmp_s;
+				numkey_cliV6[isAdded] = indexV6_cli;
+				rte_atomic64_add(&ipv6_cli[res][isAdded].n_pkt,1);
+				rte_atomic64_add(&ipv6_cli[res][isAdded].size_of_this_p,data->pkt_len);
+			} 
 		}
 		break;
 	default:
@@ -862,9 +883,11 @@ main_loop(void)
 				write_log_v4(hash_tb[!isAdded],"server",!isAdded);
 				write_log_v4(hash_tb_cli[!isAdded],"client",!isAdded);
 				write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);
+				write_log_v6(hash_tb_v6_cli[!isAdded],"client",!isAdded);
 				numkey[!isAdded]=0;
 				numkey_cli[!isAdded]=0;
 				numkeyV6[!isAdded]=0;
+				numkey_cliV6[!isAdded]=0;
 				if(isVerbose){
 					data_info[!isAdded].ipv4_usage = 0;
 					data_info[!isAdded].server_pack_v4=0;
@@ -880,6 +903,7 @@ main_loop(void)
 				rte_hash_reset(hash_tb[!isAdded]);
 				rte_hash_reset(hash_tb_cli[!isAdded]);
 				rte_hash_reset(hash_tb_v6[!isAdded]);
+				rte_hash_reset(hash_tb_v6_cli[!isAdded]);
 				/* reset the timer */
 				timer_tsc = 0;
 			}
