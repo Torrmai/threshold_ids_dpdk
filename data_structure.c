@@ -4,6 +4,7 @@
 #include <rte_ip.h>
 #include <sys/queue.h>
 #include <sys/time.h>
+#include <syslog.h>
 #include <yaml.h>
 #include "data_structure.h"
 int write_time = 0;
@@ -312,6 +313,7 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
 }
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
 {
+    openlog("For port limit",LOG_PID,LOG_USER);
     FILE *fp;
     char path[1000];
     struct timeval tv;
@@ -352,6 +354,17 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
                         fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
                         fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
+                        if(key_list[i][curr_tb].l3_pro == IPPROTO_TCP){
+                            if(tcp_port_lim[key_list[i][curr_tb].src_port] > 0 && ipv4_stat[res][curr_tb].size_of_this_p * 8 > 0){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port
+                                );
+                            }
+                        }
                     }
                     
                     //reset value
@@ -362,6 +375,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 
             }
             fclose(fp);
+            closelog();
         }
         else if(target == "client"){
             for (int i = 0; i < numelem; i++)

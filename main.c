@@ -725,6 +725,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			rte_atomic64_add(&data_info[isAdded].n_ipv6_pack,1);
 			rte_atomic64_add(&data_info[isAdded].ipv6_usage,data->pkt_len);			
 		}
+		tmp_s.l3_pro = ipv6_hdr->proto;
 		switch (ipv6_hdr ->proto)
 		{
 			case IPPROTO_UDP:
@@ -748,7 +749,6 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
 			tmp_s.ipv6_addr_dst[i] = ipv6_hdr->dst_addr[i];
 		}
-		tmp_s.l3_pro = ipv6_hdr->proto;
 		tmp_s.src_port = src_port;
 		tmp_s.dst_port = dst_port;
  		if(src_port < 1024){
@@ -768,8 +768,18 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				indexV6 = rte_hash_count(hash_tb_v6[isAdded]) - 1;
 				key_list6[indexV6][isAdded] = tmp_s;
 				numkeyV6[isAdded] = indexV6;
-				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
+				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);				
 				rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len);
+				if (ipv6_hdr->proto == IPPROTO_TCP)
+				{
+					if(tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+					if(tcp_port_lim_pps[src_port] > 0 || tcp_port_lim_pps[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+				}
+				if(ipv6_hdr->proto == IPPROTO_UDP)
+				{
+					if(udp_port_lim[src_port]>0 || udp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+					if(udp_port_lim_pps[src_port]>0 || udp_port_lim_pps[dst_port]>0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+				}
 			} 
 		}
 		else if(src_port >1024 || dst_port > 1024)
@@ -791,6 +801,16 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				numkey_cliV6[isAdded] = indexV6_cli;
 				rte_atomic64_add(&ipv6_cli[res][isAdded].n_pkt,1);
 				rte_atomic64_add(&ipv6_cli[res][isAdded].size_of_this_p,data->pkt_len);
+				if (ipv6_hdr->proto == IPPROTO_TCP)
+				{
+					if(tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+					if(tcp_port_lim_pps[src_port] > 0 || tcp_port_lim_pps[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+				}
+				if(ipv6_hdr->proto == IPPROTO_UDP)
+				{
+					if(udp_port_lim[src_port]>0 || udp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+					if(udp_port_lim_pps[src_port]>0 || udp_port_lim_pps[dst_port]>0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+				}
 			} 
 		}
 		break;
