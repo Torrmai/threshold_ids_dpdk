@@ -117,7 +117,7 @@ int init_host_lim(){
                     if(host_lim[res].size_of_this_p == 0){
                         printf("Not collide\n");
                         lim_addr[idx] = ipaddr;
-                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(MEGA)*time_peroid;
                         host_lim[res].next = NULL;
                         idx++;
                         elem_lim = idx;
@@ -140,7 +140,7 @@ int init_host_lim(){
                         }
                         curr->next = (diy_elem *)malloc(sizeof(diy_elem));
                         curr->next->realaddr = ipaddr;
-                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(MEGA)*time_peroid;
                         curr->next->next = NULL;
                         diy_elem *test = &host_stat[res][0];
                         while (test->next != NULL)
@@ -165,12 +165,12 @@ int init_host_lim(){
                 }
                 else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_Mbit_per_sec")){
                     int tmp_index = atoi(keys);
-                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(MEGA*time_peroid);
                     printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
                 }
                 else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_Mbit_per_sec")){
                     int tmp_index = atoi(keys);
-                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(MEGA*time_peroid);
                 }
                 else if(!strcmp(mapping_name[mapping_index],"Host_packet_per_sec"))
                 {
@@ -355,13 +355,46 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                         fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
                         fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
                         if(key_list[i][curr_tb].l3_pro == IPPROTO_TCP){
-                            if(tcp_port_lim[key_list[i][curr_tb].src_port] > 0 && ipv4_stat[res][curr_tb].size_of_this_p * 8 > 0){
-                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit",
+                            if(tcp_port_lim[key_list[i][curr_tb].src_port] > 0 &&  tcp_port_lim[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].size_of_this_p * 8 ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit with average usage %f Mb/s",
                                         (key_list[i][curr_tb].ipv4_addr&0xff),
                                         (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
                                         (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
                                         (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
-                                        key_list[i][curr_tb].src_port
+                                        key_list[i][curr_tb].src_port,
+                                        (ipv4_stat[res][curr_tb].size_of_this_p * 8)/(float)(real_seconds*MEGA)
+                                );
+                            }
+                            if(tcp_port_lim_pps[key_list[i][curr_tb].src_port] > 0 &&  tcp_port_lim_pps[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].n_pkt ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit by %f pps",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].n_pkt)/(float)(real_seconds)
+                                );
+                            }
+                        }
+                        if(key_list[i][curr_tb].l3_pro == IPPROTO_UDP){
+                            if(udp_port_lim[key_list[i][curr_tb].src_port] > 0 &&  udp_port_lim[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].size_of_this_p * 8 ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit with average usage %f Mb/s (udp protocol)",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].size_of_this_p * 8)/(float)(real_seconds*MEGA)
+                                );
+                            }
+                            if(udp_port_lim_pps[key_list[i][curr_tb].src_port] > 0 &&  udp_port_lim_pps[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].n_pkt ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit by %f pps (udp protocol)",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].n_pkt)/(float)(real_seconds)
                                 );
                             }
                         }

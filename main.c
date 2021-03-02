@@ -882,8 +882,8 @@ main_loop(void)
 					{
 						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8 && host_lim[res].size_of_this_p > 0)
 						{
-							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
-							uint64_t real_lim = (host_lim[res].size_of_this_p)/(10*10*10*10*10*10*real_seconds);
+							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(MEGA*real_seconds);
+							uint64_t real_lim = (host_lim[res].size_of_this_p)/(MEGA*real_seconds);
 							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"Mb/s (%f Mb/s for real use)",(lim_addr[i]&0xff)
 									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
 						}

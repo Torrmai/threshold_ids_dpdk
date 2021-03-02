@@ -14,6 +14,7 @@
 */
 #define RECORD_ENTIRES 100000
 #define REC_GLOBAL_LIM 3000000
+#define MEGA 10*10*10*10*10*10
 //data structure secsion
 struct compo_keyV4
 {
