@@ -236,8 +236,6 @@ void print_IPv6(uint8_t addr[],FILE *f){
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
 {
     FILE *fp;
-    char src_adr[16];
-    char dst_addr[16];
     char path[1000];
     struct timeval tv;
     int res;
