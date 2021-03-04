@@ -140,14 +140,16 @@ struct max_mem{
 struct usage_stat ipv4_stat[RECORD_ENTIRES][2];
 struct usage_stat ipv4_cli[RECORD_ENTIRES][2];
 struct usage_stat ipv6_stat[RECORD_ENTIRES][2];
+struct usage_stat ipv6_cli[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list[RECORD_ENTIRES][2];
 struct compo_keyV4 key_list_cli[RECORD_ENTIRES][2];
 struct compo_keyV6 key_list6[RECORD_ENTIRES][2];
+struct compo_keyV6 key_list_cli6[RECORD_ENTIRES][2];
 struct diy_hash host_stat[RECORD_ENTIRES][2];
 const struct rte_hash *hash_tb[2];
 const struct rte_hash *hash_tb_cli[2];
 const struct rte_hash *hash_tb_v6[2];
-const struct rte_hash *limit_hash;
+const struct rte_hash *hash_tb_v6_cli[2];
 uint64_t tcp_port_lim[65536];
 uint64_t udp_port_lim[65536];
 //struct rte_hash *hash_tb_v6_cli[2];
@@ -155,6 +157,7 @@ uint64_t udp_port_lim[65536];
 uint32_t numkey[] = {0,0};
 uint32_t numkey_cli[] = {0,0};
 uint32_t numkeyV6[] = {0,0};
+uint32_t numkey_cliV6[] ={0,0};
 unsigned n_port;
 int elem_lim;
 uint32_t lim_addr[RECORD_ENTIRES];
@@ -570,9 +573,11 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 				{
 					rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 				}
+				if(tcp_port_lim_pps[port1]>0||tcp_port_lim_pps[port2]>0) rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 			}
 			if(l3_pro == 0x11){
 				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
+				if(udp_port_lim_pps[port1] > 0 || udp_port_lim_pps[port2] > 0)rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
 			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_stat[res][isAdded].is_alert,1);
@@ -608,10 +613,12 @@ add_to_hash(uint32_t addr,uint16_t port1,uint16_t port2,uint64_t size,uint8_t l3
 				{
 					rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 				}
+				if(tcp_port_lim_pps[port1] > 0 || tcp_port_lim_pps[port2] >0)rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 			}
 			if (l3_pro == 0x11)
 			{
 				if(udp_port_lim[port1] > 0 || udp_port_lim[port2] > 0) rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
+				if(udp_port_lim_pps[port1]>0 || udp_port_lim_pps[port2]>0) rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
 			}
 			if(setflag){
 				rte_atomic64_set(&ipv4_cli[res][isAdded].is_alert,1);
@@ -640,6 +647,7 @@ process_data(struct rte_mbuf *data,unsigned portid){
 	uint16_t src_port = 0;
 	uint16_t dst_port = 0;
 	int indexV6;
+	int indexV6_cli;
 	switch (eth_type)
 	{
 	case RTE_ETHER_TYPE_IPV4:
@@ -717,14 +725,15 @@ process_data(struct rte_mbuf *data,unsigned portid){
 			rte_atomic64_add(&data_info[isAdded].n_ipv6_pack,1);
 			rte_atomic64_add(&data_info[isAdded].ipv6_usage,data->pkt_len);			
 		}
+		tmp_s.l3_pro = ipv6_hdr->proto;
 		switch (ipv6_hdr ->proto)
 		{
-			case 0x11:
+			case IPPROTO_UDP:
 				udp_data = (struct rte_udp_hdr *)((char *)ipv6_hdr + sizeof(struct rte_ipv6_hdr));
 				dst_port = udp_data->dst_port;
 				src_port = udp_data->src_port;
 				break;
-			case 0x06:
+			case IPPROTO_TCP:
 				tcp_data = (struct rte_tcp_hdr *)((char *)ipv6_hdr + sizeof(struct rte_ipv6_hdr));
 				dst_port = tcp_data->dst_port;
 				src_port = tcp_data->src_port;
@@ -735,16 +744,15 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				break;
 		}
 		//check for server in both sides
+		for (size_t i = 0; i < 16; i++)
+		{
+			tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
+			tmp_s.ipv6_addr_dst[i] = ipv6_hdr->dst_addr[i];
+		}
+		tmp_s.src_port = src_port;
+		tmp_s.dst_port = dst_port;
  		if(src_port < 1024){
 			rte_atomic64_add(&data_info[isAdded].server_pack_v6,1);
-			for (size_t i = 0; i < 16; i++)
-			{
-				tmp_s.ipv6_addr[i] = ipv6_hdr->src_addr[i];
-				tmp_s.ipv6_addr_dst[i] = ipv6_hdr->dst_addr[i];
-			}
-			tmp_s.l3_pro = ipv6_hdr->proto;
-			tmp_s.src_port = src_port;
-			tmp_s.dst_port = dst_port;
 			//printf("%"PRIu8"\n",tmp_s.ipv6_addr[0]);
 			if((void *)&tmp_s != NULL & tmp_s.ipv6_addr != NULL & tmp_s.ipv6_addr_dst != NULL){
 				res = rte_hash_add_key(hash_tb_v6[isAdded],(void *)&tmp_s);
@@ -760,13 +768,50 @@ process_data(struct rte_mbuf *data,unsigned portid){
 				indexV6 = rte_hash_count(hash_tb_v6[isAdded]) - 1;
 				key_list6[indexV6][isAdded] = tmp_s;
 				numkeyV6[isAdded] = indexV6;
-				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);
+				rte_atomic64_add(&ipv6_stat[res][isAdded].n_pkt,1);				
 				rte_atomic64_add(&ipv6_stat[res][isAdded].size_of_this_p,data->pkt_len);
+				if (ipv6_hdr->proto == IPPROTO_TCP)
+				{
+					if(tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+					if(tcp_port_lim_pps[src_port] > 0 || tcp_port_lim_pps[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+				}
+				if(ipv6_hdr->proto == IPPROTO_UDP)
+				{
+					if(udp_port_lim[src_port]>0 || udp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+					if(udp_port_lim_pps[src_port]>0 || udp_port_lim_pps[dst_port]>0)rte_atomic64_set(&ipv6_stat[res][isAdded].is_alert,1);
+				}
 			} 
 		}
 		else if(src_port >1024 || dst_port > 1024)
 		{
-			rte_atomic64_add(&data_info[isAdded].server_pack_v6,1);
+			rte_atomic64_add(&data_info[isAdded].client_pack_v6,1);
+			if((void *)&tmp_s != NULL & tmp_s.ipv6_addr != NULL & tmp_s.ipv6_addr_dst != NULL){
+				res = rte_hash_add_key(hash_tb_v6_cli[isAdded],(void *)&tmp_s);
+				if(res <0)
+				{
+					if(res == -EINVAL){
+						printf("Invalid param?\n");
+					}
+					if(res == -ENOSPC){
+						printf("No space?\n");
+					}
+				}
+				indexV6_cli = rte_hash_count(hash_tb_v6_cli[isAdded]) - 1;
+				key_list_cli6[indexV6_cli][isAdded] = tmp_s;
+				numkey_cliV6[isAdded] = indexV6_cli;
+				rte_atomic64_add(&ipv6_cli[res][isAdded].n_pkt,1);
+				rte_atomic64_add(&ipv6_cli[res][isAdded].size_of_this_p,data->pkt_len);
+				if (ipv6_hdr->proto == IPPROTO_TCP)
+				{
+					if(tcp_port_lim[src_port] > 0 || tcp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+					if(tcp_port_lim_pps[src_port] > 0 || tcp_port_lim_pps[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+				}
+				if(ipv6_hdr->proto == IPPROTO_UDP)
+				{
+					if(udp_port_lim[src_port]>0 || udp_port_lim[dst_port] > 0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+					if(udp_port_lim_pps[src_port]>0 || udp_port_lim_pps[dst_port]>0)rte_atomic64_set(&ipv6_cli[res][isAdded].is_alert,1);
+				}
+			} 
 		}
 		break;
 	default:
@@ -835,11 +880,18 @@ main_loop(void)
 					//printf("%d\n",res);
 					if(host_lim[res].is_alert == 0)
 					{
-						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8)
+						if (host_lim[res].size_of_this_p < host_stat[res][!isAdded].size_of_this_p*8 && host_lim[res].size_of_this_p > 0)
 						{
-							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(10*10*10*10*10*10*real_seconds);
-							uint64_t real_lim = (host_lim[res].size_of_this_p)/(10*10*10*10*10*10*real_seconds);
+							float usage = (float)(host_stat[res][!isAdded].size_of_this_p*8)/(float)(MEGA*real_seconds);
+							uint64_t real_lim = (host_lim[res].size_of_this_p)/(MEGA*real_seconds);
 							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"Mb/s (%f Mb/s for real use)",(lim_addr[i]&0xff)
+									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
+						}
+						if (host_lim[res].n_pkt < host_stat[res][!isAdded].n_pkt && host_lim[res].n_pkt > 0)
+						{
+							float usage = (float)(host_stat[res][!isAdded].n_pkt)/(float)(real_seconds);
+							uint64_t real_lim = (host_lim[res].n_pkt)/(real_seconds);
+							syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8" has exceeded limit %"PRIu64"pps (%f pps for real use)",(lim_addr[i]&0xff)
 									,((lim_addr[i]>>8)&0xff),((lim_addr[i]>>16)&0xff),(lim_addr[i]>>24)&0xff,real_lim,usage);
 						}
 						host_stat[res][!isAdded].size_of_this_p=0;
@@ -851,9 +903,11 @@ main_loop(void)
 				write_log_v4(hash_tb[!isAdded],"server",!isAdded);
 				write_log_v4(hash_tb_cli[!isAdded],"client",!isAdded);
 				write_log_v6(hash_tb_v6[!isAdded],"server",!isAdded);
+				write_log_v6(hash_tb_v6_cli[!isAdded],"client",!isAdded);
 				numkey[!isAdded]=0;
 				numkey_cli[!isAdded]=0;
 				numkeyV6[!isAdded]=0;
+				numkey_cliV6[!isAdded]=0;
 				if(isVerbose){
 					data_info[!isAdded].ipv4_usage = 0;
 					data_info[!isAdded].server_pack_v4=0;
@@ -869,6 +923,7 @@ main_loop(void)
 				rte_hash_reset(hash_tb[!isAdded]);
 				rte_hash_reset(hash_tb_cli[!isAdded]);
 				rte_hash_reset(hash_tb_v6[!isAdded]);
+				rte_hash_reset(hash_tb_v6_cli[!isAdded]);
 				/* reset the timer */
 				timer_tsc = 0;
 			}
@@ -888,6 +943,8 @@ main_loop(void)
 				m = pkts_burst[j];
 				rte_prefetch0(rte_pktmbuf_mtod(m, void *));
 				process_data(pkts_burst[j],portid);
+				//if(pkts_burst[j]->pkt_len >= 64) process_data(pkts_burst[j],portid);//basic check for valid packet
+				//else rte_pktmbuf_free(pkts_burst[j]);
 				//forward_data(pkts_burst[j],!qconf->tx_port_id[i],qconf->tx_queue_id[i]);
 			}
 		}
@@ -1014,6 +1071,24 @@ main(int argc, char **argv){
 			return -1;
 		}
 	}
+	for (int i = 0; i < 2; i++)
+	{
+		char name[255];
+		sprintf(name,"ipv6 hash cli%d",i);
+		struct rte_hash_parameters params = {
+			.name = name,
+			.entries = RECORD_ENTIRES,
+			.key_len = sizeof(struct compo_keyV6),
+			.hash_func = rte_jhash,
+			.hash_func_init_val = 0,
+			.socket_id = 0,
+		};
+		hash_tb_v6_cli[i] = rte_hash_create(&params);
+		if(!hash_tb_v6_cli[i]){
+			fprintf(stderr,"create ipv6%d failed\n",i);
+			return -1;
+		}
+	}
 	//end of initialization of server roles
 	
 	check_all_ports_link_status();
@@ -1042,6 +1117,7 @@ main(int argc, char **argv){
 		rte_hash_free(hash_tb[i]);
 		rte_hash_free(hash_tb_cli[i]);
 		rte_hash_free(hash_tb_v6[i]);
+		rte_hash_free(hash_tb_v6_cli[i]);
 	}
 	syslog(LOG_INFO,"Closing packet processor/data manager C process......");
 	closelog();

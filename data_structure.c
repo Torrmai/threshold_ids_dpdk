@@ -4,6 +4,7 @@
 #include <rte_ip.h>
 #include <sys/queue.h>
 #include <sys/time.h>
+#include <syslog.h>
 #include <yaml.h>
 #include "data_structure.h"
 int write_time = 0;
@@ -11,6 +12,8 @@ int isVerbose = 0;
 int elem_lim;
 int printAll;
 uint64_t tcp_port_lim[65536];
+uint64_t tcp_port_lim_pps[65536];
+uint64_t udp_port_lim_pps[65536];
 uint64_t time_peroid = 10;
 uint64_t real_seconds;
 uint32_t lim_addr[RECORD_ENTIRES];
@@ -114,7 +117,7 @@ int init_host_lim(){
                     if(host_lim[res].size_of_this_p == 0){
                         printf("Not collide\n");
                         lim_addr[idx] = ipaddr;
-                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        host_lim[res].size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(MEGA)*time_peroid;
                         host_lim[res].next = NULL;
                         idx++;
                         elem_lim = idx;
@@ -137,7 +140,7 @@ int init_host_lim(){
                         }
                         curr->next = (diy_elem *)malloc(sizeof(diy_elem));
                         curr->next->realaddr = ipaddr;
-                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(10*10*10*10*10*10)*time_peroid;
+                        curr->next->size_of_this_p = strtoll(event.data.scalar.value,NULL,10)*(MEGA)*time_peroid;
                         curr->next->next = NULL;
                         diy_elem *test = &host_stat[res][0];
                         while (test->next != NULL)
@@ -162,13 +165,42 @@ int init_host_lim(){
                 }
                 else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_Mbit_per_sec")){
                     int tmp_index = atoi(keys);
-                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    tcp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(MEGA*time_peroid);
                     printf("%d %"PRIu64"\n",tmp_index,tcp_port_lim[tmp_index]);
                 }
                 else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_Mbit_per_sec")){
                     int tmp_index = atoi(keys);
-                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(10*10*10*10*10*10*time_peroid);
+                    udp_port_lim[tmp_index] = atoi(event.data.scalar.value)*(MEGA*time_peroid);
                 }
+                else if(!strcmp(mapping_name[mapping_index],"Host_packet_per_sec"))
+                {
+                    
+                    ipaddr = RTE_IPV4(a[3],a[2],a[1],a[0]);
+                    res = ipaddr%RECORD_ENTIRES;
+                    if(host_lim[res].realaddr == ipaddr || host_lim[res].realaddr == 0)
+                    {
+                        if(host_lim[res].realaddr == 0){
+                            lim_addr[idx] = ipaddr;
+                            idx++;
+                            elem_lim = idx;
+                            host_stat[res][0].realaddr = ipaddr;
+                            host_stat[res][1].realaddr = ipaddr;
+                        } 
+                        host_lim[res].realaddr = ipaddr;
+                        host_lim[res].n_pkt = atoi(event.data.scalar.value)*time_peroid;
+                        host_lim[res].next = NULL;
+                    }
+                    printf("%"PRIu32" %"PRIu64"\n",ipaddr,host_lim[res].n_pkt);
+                }
+                else if(!strcmp(mapping_name[mapping_index],"udp_port_limit_packet_per_sec")){
+                    int tmp_index = atoi(keys);
+                    udp_port_lim_pps[tmp_index] = atoi(event.data.scalar.value)*time_peroid;
+                }
+                else if(!strcmp(mapping_name[mapping_index],"tcp_port_limit_packet_per_sec")){
+                    int tmp_index = atoi(keys);
+                    tcp_port_lim_pps[tmp_index] = atoi(event.data.scalar.value)*time_peroid;
+                }
+ 
             }
             break;
         default: break;
@@ -204,8 +236,6 @@ void print_IPv6(uint8_t addr[],FILE *f){
 void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
 {
     FILE *fp;
-    char src_adr[16];
-    char dst_addr[16];
     char path[1000];
     struct timeval tv;
     int res;
@@ -235,10 +265,11 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
                             printf("error\n");
                         }
                     }
-                    else
+                    else if(ipv6_stat[res][curr_tb].size_of_this_p > 0)
                     {
+
                         print_IPv6(key_list6[i][curr_tb].ipv6_addr,fp);
-                        fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);
+                        fprintf(fp,",%"PRIu16",",key_list[i][curr_tb].src_port);                       
                         print_IPv6(key_list6[i][curr_tb].ipv6_addr_dst,fp);
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list6[i][curr_tb].dst_port,key_list6[i][curr_tb].l3_pro);
                         fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv6_stat[res][curr_tb].size_of_this_p * 8,ipv6_stat[res][curr_tb].n_pkt);
@@ -250,36 +281,37 @@ void write_log_v6(struct rte_hash *tb,char *target,int curr_tb)
             }
             fclose(fp);
         }
-        /*else if(target == "client"){
+        else if(target == "client"){
             for (int i = 0; i < numelem; i++)
             {
-                res = rte_hash_lookup(tb,(void *)&key_list_cli[i][curr_tb]);
+                res = rte_hash_lookup(tb,(void *)&key_list_cli6[i][curr_tb]);
                 if(res < 0){
                     if(res == -EINVAL){
                         printf("error\n");
                     }
                     printf(res);
                 }
-                else
+                else if(ipv6_cli[res][curr_tb].size_of_this_p > 0)
                 {
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
-                    fprintf(fp,",%"PRIu16",",key_list_cli[i][curr_tb].src_port);
-                    print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr_dst);
-                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
+                    print_IPv6(key_list_cli6[i][curr_tb].ipv6_addr,fp);
+                    fprintf(fp,",%"PRIu16",",key_list_cli6[i][curr_tb].src_port);
+                    print_IPv6(key_list_cli6[i][curr_tb].ipv6_addr_dst,fp);
+                    fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli6[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
+                    fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv6_cli[res][curr_tb].size_of_this_p * 8,ipv6_cli[res][curr_tb].n_pkt);
                 }
                 //reset value
-                ipv4_cli[res][curr_tb].size_of_this_p = 0;
-                ipv4_cli[res][curr_tb].n_pkt = 0;
+                ipv6_cli[res][curr_tb].size_of_this_p = 0;
+                ipv6_cli[res][curr_tb].n_pkt = 0;
             }
             fclose(fp);
-        }*/
+        }
     }else{
         write_time++;
     }
 }
 void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
 {
+    openlog("For port limit",LOG_PID,LOG_USER);
     FILE *fp;
     char path[1000];
     struct timeval tv;
@@ -320,6 +352,50 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
                         fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
                         fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
+                        if(key_list[i][curr_tb].l3_pro == IPPROTO_TCP){
+                            if(tcp_port_lim[key_list[i][curr_tb].src_port] > 0 &&  tcp_port_lim[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].size_of_this_p * 8 ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit with average usage %f Mb/s",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (ipv4_stat[res][curr_tb].size_of_this_p * 8)/(float)(real_seconds*MEGA)
+                                );
+                            }
+                            if(tcp_port_lim_pps[key_list[i][curr_tb].src_port] > 0 &&  tcp_port_lim_pps[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].n_pkt ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit by %f pps",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].n_pkt)/(float)(real_seconds)
+                                );
+                            }
+                        }
+                        if(key_list[i][curr_tb].l3_pro == IPPROTO_UDP){
+                            if(udp_port_lim[key_list[i][curr_tb].src_port] > 0 &&  udp_port_lim[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].size_of_this_p * 8 ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit with average usage %f Mb/s (udp protocol)",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].size_of_this_p * 8)/(float)(real_seconds*MEGA)
+                                );
+                            }
+                            if(udp_port_lim_pps[key_list[i][curr_tb].src_port] > 0 &&  udp_port_lim_pps[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].n_pkt ){
+                                syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit by %f pps (udp protocol)",
+                                        (key_list[i][curr_tb].ipv4_addr&0xff),
+                                        (key_list[i][curr_tb].ipv4_addr >> 8)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 16)&0xff,
+                                        (key_list[i][curr_tb].ipv4_addr >> 24)&0xff,
+                                        key_list[i][curr_tb].src_port,
+                                        (float)(ipv4_stat[res][curr_tb].n_pkt)/(float)(real_seconds)
+                                );
+                            }
+                        }
                     }
                     
                     //reset value
@@ -330,6 +406,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 
             }
             fclose(fp);
+            closelog();
         }
         else if(target == "client"){
             for (int i = 0; i < numelem; i++)

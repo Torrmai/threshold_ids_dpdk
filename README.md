@@ -23,3 +23,4 @@ Here are main features
 ## Hard way
 
 # Some output can't disable such as initial status
+# IPv6 address support ONLY full address
