@@ -697,17 +697,10 @@ process_data(struct rte_mbuf *data,unsigned portid){
 					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"server_v4",collect);
 					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4",collect);
 				}
-				else if(src_port > 1024 && dst_port > 1024){
+				else if(src_port > 1024){
 					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
 					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4",collect);
 					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"client_v4",collect);
-				}
-				else if(src_port > 1024 && dst_port < 1024)
-				{
-					rte_atomic64_add(&data_info[isAdded].server_pack_v4,1);
-					rte_atomic64_add(&data_info[isAdded].client_pack_v4,1);
-					add_to_hash(src,src_port,dst_port,data->pkt_len,ipv4_hdr->next_proto_id,dst,"client_v4",collect);
-					add_to_hash(dst,dst_port,src_port,data->pkt_len,ipv4_hdr->next_proto_id,src,"server_v4",collect);
 				}
 				else
 				{

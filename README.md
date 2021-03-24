@@ -11,16 +11,14 @@ Here are main features
 # Dependency
 
 - dpdk 20.05
+- libyaml or libyaml-devel
+- syslog
 
 # How to use
 
-## Easy way
+- You can use these params: https://doc.dpdk.org/guides-20.05/linux_gsg/linux_eal_parameters.html
+- Other configuration you can read "config.yaml" for a guide line
 
-1. change user to root
-2. run run.sh
-3. enjoy!!!!!
-
-## Hard way
 
 # Some output can't disable such as initial status
 # IPv6 address support ONLY full address

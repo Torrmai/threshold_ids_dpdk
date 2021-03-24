@@ -350,8 +350,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );                        
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list[i][curr_tb].dst_port,key_list[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
-                        fprintf(fp,",%d\n",ipv4_stat[res][curr_tb].is_alert);
+                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_stat[res][curr_tb].size_of_this_p * 8,ipv4_stat[res][curr_tb].n_pkt);
                         if(key_list[i][curr_tb].l3_pro == IPPROTO_TCP){
                             if(tcp_port_lim[key_list[i][curr_tb].src_port] > 0 &&  tcp_port_lim[key_list[i][curr_tb].src_port] <= ipv4_stat[res][curr_tb].size_of_this_p * 8 ){
                                 syslog(LOG_WARNING,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8": %"PRIu16" has exceed limit with average usage %f Mb/s",
@@ -420,7 +419,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                 }
                 else
                 {
-                    if(ipv4_cli[res][curr_tb].is_alert)
+                    if(ipv4_cli[res][curr_tb].is_alert && (ipv4_cli[res][curr_tb].size_of_this_p > 0))
                     {
                         //print_ip(fp,key_list_cli[i][curr_tb].ipv4_addr);
                         fprintf(fp,"%"PRIu8".%"PRIu8".%"PRIu8".%"PRIu8"",
@@ -438,8 +437,7 @@ void write_log_v4(struct rte_hash *tb,char *target,int curr_tb)
                             (key_list_cli[i][curr_tb].ipv4_addr_dst >> 24)&0xff
                             );
                         fprintf(fp,",%"PRIu16",%"PRIu8,key_list_cli[i][curr_tb].dst_port,key_list_cli[i][curr_tb].l3_pro);
-                        fprintf(fp,",%"PRIu64",%"PRIu64,ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
-                        fprintf(fp,",%d\n",ipv4_cli[res][curr_tb].is_alert);
+                        fprintf(fp,",%"PRIu64",%"PRIu64"\n",ipv4_cli[res][curr_tb].size_of_this_p * 8,ipv4_cli[res][curr_tb].n_pkt);
                     }
                     //reset value
                     rte_atomic64_set(&ipv4_cli[res][curr_tb].size_of_this_p,0);
